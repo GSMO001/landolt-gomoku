@@ -12,10 +12,7 @@ const rooms = {};
 
 io.on("connection", (socket) => {
     socket.on("createRoom", ({ roomId, settings }) => {
-        if (rooms[roomId]) {
-            socket.emit("error_msg", "そのルーム名は既に存在します。別の名前にしてください。");
-            return;
-        }
+        if (rooms[roomId]) return socket.emit("error_msg", "そのルーム名は既に存在します。");
         rooms[roomId] = {
             id: roomId,
             players: [socket.id],
@@ -26,22 +23,17 @@ io.on("connection", (socket) => {
             timeLeft: settings.timeLimit === 'free' ? null : parseInt(settings.timeLimit)
         };
         socket.join(roomId);
-        socket.emit("roomJoined", { roomId, playerIndex: 0, settings });
+        socket.emit("roomJoined", { roomId, playerIndex: 0 });
     });
 
     socket.on("joinRoom", (roomId) => {
         const room = rooms[roomId];
-        if (!room) {
-            socket.emit("error_msg", "ルームが見つかりません。");
-            return;
-        }
-        if (room.players.length >= 2) {
-            socket.emit("error_msg", "このルームは満員です。");
-            return;
-        }
+        if (!room) return socket.emit("error_msg", "ルームが見つかりません。");
+        if (room.players.length >= 2) return socket.emit("error_msg", "満員です。");
+        
         room.players.push(socket.id);
         socket.join(roomId);
-        socket.emit("roomJoined", { roomId, playerIndex: 1, settings: room.settings });
+        socket.emit("roomJoined", { roomId, playerIndex: 1 });
         io.to(roomId).emit("gameStart");
         startTimer(roomId);
     });
@@ -89,5 +81,4 @@ io.on("connection", (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+server.listen(process.env.PORT || 3000);
