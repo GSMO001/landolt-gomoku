@@ -2,386 +2,515 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>ランドルト環五目並べ ONLINE</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         :root {
-            --board-bg: #14532d;
-            --ui-bg: #f8fafc;
-            --accent: #3b82f6;
-            --danger: #ef4444;
+            --bg-deep: #14532d; /* 指定の深緑 */
+            --ui-white: #ffffff;
+            --ui-gray: #f1f5f9;
+            --accent: #2563eb;
+            --danger: #dc2626;
+            --gold: #fbbf24;
         }
 
+        /* ブラウザのデフォルト動作を完全に殺す */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             -webkit-touch-callout: none;
+            -webkit-user-select: none;
             user-select: none;
-            touch-action: none; /* 重要: ブラウザのデフォルト動作を完全に抑制 */
+            touch-action: none; 
+            overscroll-behavior: none;
         }
 
         body {
-            font-family: -apple-system, sans-serif;
-            background: var(--ui-bg);
+            font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+            background: #0f172a;
             height: 100vh;
-            overflow: hidden;
+            width: 100vw;
             display: flex;
             justify-content: center;
+            overflow: hidden;
         }
 
-        .container {
+        .app-shell {
             width: 100%;
             max-width: 600px;
             height: 100%;
+            background: var(--ui-white);
             display: flex;
             flex-direction: column;
-            background: #fff;
             position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
         }
 
-        /* Lobby */
-        #lobby {
+        /* --- LOBBY UI --- */
+        #lobby-ui {
             flex: 1;
-            padding: 20px;
-            overflow-y: auto;
             display: flex;
             flex-direction: column;
+            padding: 24px;
+            overflow-y: auto;
         }
 
-        .card {
-            background: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        .hero-title {
+            font-size: 28px;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 24px;
+            color: #1e293b;
         }
 
-        input, select, button {
+        .setup-card {
+            background: var(--ui-gray);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .input-group { margin-bottom: 16px; }
+        label { display: block; font-size: 14px; font-weight: bold; color: #475569; margin-bottom: 6px; }
+        
+        input, select {
             width: 100%;
-            padding: 12px;
-            margin-top: 10px;
-            border-radius: 8px;
-            border: 1px solid #cbd5e1;
+            padding: 14px;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
             font-size: 16px;
+            background: white;
+            outline: none;
+            transition: border-color 0.2s;
         }
+        input:focus { border-color: var(--accent); }
 
-        .btn-main {
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
             background: var(--accent);
             color: white;
             border: none;
+            border-radius: 12px;
             font-weight: bold;
+            font-size: 18px;
             cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);
         }
 
-        /* Game */
-        #game-screen {
+        .room-item {
+            background: white;
+            border: 2px solid #f1f5f9;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.1s;
+        }
+        .room-item:active { transform: scale(0.98); }
+
+        /* --- GAME UI --- */
+        #game-ui {
             display: none;
             flex-direction: column;
             height: 100%;
         }
 
-        .top-bar {
-            padding: 10px 20px;
-            background: #fff;
+        .game-header {
+            padding: 12px 20px;
+            background: white;
             border-bottom: 1px solid #e2e8f0;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            z-index: 10;
         }
 
-        #canvas-container {
+        #timer-display {
+            font-size: 32px;
+            font-weight: 800;
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--danger);
+        }
+
+        #viewport-container {
             flex: 1;
-            background: var(--board-bg);
+            background: var(--bg-deep);
             position: relative;
-            overflow: hidden;
+            cursor: grab;
         }
 
-        canvas {
-            display: block;
-        }
+        #viewport-container:active { cursor: grabbing; }
 
-        .controls {
-            padding: 15px;
-            background: #fff;
+        canvas { display: block; width: 100%; height: 100%; }
+
+        .game-footer {
+            background: white;
+            padding: 16px 20px;
             border-top: 1px solid #e2e8f0;
         }
 
-        .dir-grid {
-            display: flex;
-            justify-content: space-around;
-            margin-bottom: 15px;
+        .direction-panel {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
         }
 
-        .dir-btn {
-            width: 50px;
-            height: 50px;
-            border: 2px solid #e2e8f0;
-            background: #fff;
-            border-radius: 10px;
-            font-size: 20px;
+        .dir-button {
+            height: 60px;
+            border: 3px solid #f1f5f9;
+            background: white;
+            border-radius: 14px;
+            font-size: 24px;
             display: flex;
             align-items: center;
             justify-content: center;
+            color: #64748b;
+            transition: all 0.2s;
         }
 
-        .dir-btn.active {
+        .dir-button.active {
             border-color: var(--accent);
             background: #eff6ff;
             color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37,99,235,0.2);
         }
 
-        /* Modal */
-        .modal {
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: #475569;
+        }
+
+        /* --- OVERLAYS --- */
+        .modal-overlay {
             display: none;
-            position: fixed;
+            position: absolute;
             inset: 0;
-            background: rgba(0,0,0,0.7);
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(4px);
             z-index: 1000;
+            padding: 40px;
             align-items: center;
             justify-content: center;
         }
 
-        .modal-content {
-            background: #fff;
-            padding: 30px;
-            border-radius: 16px;
-            width: 80%;
-            max-width: 400px;
+        .result-card {
+            background: white;
+            width: 100%;
+            border-radius: 24px;
+            padding: 32px;
             text-align: center;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .review-controls {
+            display: none;
+            background: #1e293b;
+            padding: 12px;
+            border-radius: 40px;
+            margin-bottom: 12px;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+        .rev-btn {
+            background: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 22px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div id="lobby">
-        <h2 style="margin-bottom:15px">ランドルト環五目並べ</h2>
-        <div class="card">
-            <input type="text" id="roomIdIn" placeholder="ルーム名">
-            <input type="password" id="roomPwIn" placeholder="パスワード(任意)">
-            <select id="timeLimitIn">
-                <option value="30">30秒</option>
-                <option value="60">60秒</option>
-                <option value="free">無制限</option>
-            </select>
-            <button class="btn-main" onclick="createRoom()">ルーム作成</button>
+<div class="app-shell">
+    <div id="lobby-ui">
+        <h1 class="hero-title">LANDOLT GOMOKU</h1>
+        
+        <div class="setup-card">
+            <div class="input-group">
+                <label>ROOM NAME</label>
+                <input type="text" id="create-id" placeholder="名前を付けてください">
+            </div>
+            <div class="input-group">
+                <label>PASSWORD (OPTIONAL)</label>
+                <input type="password" id="create-pw" placeholder="秘密の対局に">
+            </div>
+            <div class="input-group">
+                <label>TIME LIMIT</label>
+                <select id="create-limit">
+                    <option value="30">30 Seconds</option>
+                    <option value="60">60 Seconds</option>
+                    <option value="free">No Limit</option>
+                </select>
+            </div>
+            <button class="btn-primary" onclick="reqCreate()">CREATE NEW ROOM</button>
         </div>
-        <div id="roomList"></div>
+
+        <div id="room-list-container">
+            </div>
     </div>
 
-    <div id="game-screen">
-        <div class="top-bar">
+    <div id="game-ui">
+        <div class="game-header">
             <div>
-                <b id="displayRoomId">---</b><br>
-                <small id="statusLabel">待機中</small>
+                <b id="room-title-display">---</b><br>
+                <span id="turn-indicator" style="font-size:12px">WAITING...</span>
             </div>
-            <div id="timer" style="font-size: 24px; font-weight: bold; color: var(--danger)">--</div>
+            <div id="timer-display">--</div>
         </div>
 
-        <div id="canvas-container">
-            <canvas id="gameCanvas"></canvas>
+        <div id="viewport-container">
+            <canvas id="main-canvas"></canvas>
         </div>
 
-        <div class="controls">
-            <div class="dir-grid">
-                <div class="dir-btn active" onclick="setDir(0)">↑</div>
-                <div class="dir-btn" onclick="setDir(1)">→</div>
-                <div class="dir-btn" onclick="setDir(2)">↓</div>
-                <div class="dir-btn" onclick="setDir(3)">←</div>
+        <div class="game-footer">
+            <div id="review-panel" class="review-controls">
+                <button class="rev-btn" onclick="reviewMove(-1)">◀</button>
+                <span id="review-counter" style="color:white; font-family:monospace">0 / 0</span>
+                <button class="rev-btn" onclick="reviewMove(1)">▶</button>
             </div>
-            <div id="review-ui" style="display:none; text-align:center; margin-bottom:10px;">
-                <button onclick="changeReviewStep(-1)" style="width:auto; padding:5px 15px;">◀</button>
-                <span id="reviewText" style="margin:0 15px; font-weight:bold;">0 / 0</span>
-                <button onclick="changeReviewStep(1)" style="width:auto; padding:5px 15px;">▶</button>
+
+            <div class="direction-panel" id="dir-panel">
+                <div class="dir-button active" onclick="updateSelDir(0)">↑</div>
+                <div class="dir-button" onclick="updateSelDir(1)">→</div>
+                <div class="dir-button" onclick="updateSelDir(2)">↓</div>
+                <div class="dir-button" onclick="updateSelDir(3)">←</div>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span id="pairInfo" style="font-size:12px; font-weight:bold;">連続対: 黒0 白0</span>
-                <button onclick="location.reload()" style="width:auto; padding:5px 15px; background:none; color:var(--danger); border:none;">退出</button>
+
+            <div class="status-row">
+                <span id="pair-stats">PAIRS: B 0 / W 0</span>
+                <button onclick="location.reload()" style="border:none; background:none; color:var(--danger); font-weight:bold;">LEAVE</button>
             </div>
         </div>
     </div>
-</div>
 
-<div id="modal" class="modal">
-    <div class="modal-content">
-        <h2 id="modalTitle">対局終了</h2>
-        <p id="modalMsg" style="margin: 15px 0; color: #64748b;"></p>
-        <button class="btn-main" onclick="startReview()">感想戦</button>
-        <button class="btn-main" style="background:#64748b; margin-top:10px;" onclick="location.reload()">ロビーへ</button>
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="result-card">
+            <h2 id="result-title" style="font-size:32px; margin-bottom:8px">VICTORY!</h2>
+            <p id="result-desc" style="margin-bottom:24px; color:#64748b">五目並びが成立しました。</p>
+            <button class="btn-primary" onclick="initReviewMode()" style="margin-bottom:12px">感想戦を行う</button>
+            <button class="btn-primary" style="background:#64748b" onclick="location.reload()">ロビーへ戻る</button>
+        </div>
     </div>
 </div>
 
 <script>
     /**
-     * LANDOLT GOMOKU - JS ENGINE
+     * LANDOLT GOMOKU - ADVANCED CLIENT ENGINE
      */
     const socket = io();
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const container = document.getElementById('canvas-container');
+    const canvas = document.getElementById('main-canvas');
+    const ctx = canvas.getContext('2d', { alpha: false }); // パフォーマンス向上
+    const container = document.getElementById('viewport-container');
 
+    // システム定数
     const GRID_SIZE = 128;
-    const CELL_SIZE = 40;
+    const CELL_PX = 40;
 
-    let myRoom = "";
-    let myIndex = null;
-    let board = [];
-    let history = [];
-    let turn = 0;
-    let pairs = [0, 0];
-    let isRunning = false;
+    // ゲーム同期データ
+    let mySide = null;
+    let currentTurn = 0;
+    let boardState = [];
+    let moveHistory = [];
+    let currentPairs = [0, 0];
+    let isGameActive = false;
 
-    // View State
+    // 表示系パラメータ（高精度変位管理）
     let camX = 64, camY = 64;
-    let scale = 1.0;
-    let selectedDir = 0;
-    let isReview = false;
-    let reviewIdx = 0;
+    let zoom = 1.0;
+    let selDir = 0;
+    let isReviewing = false;
+    let reviewIndex = 0;
 
-    // --- Lobby Logic ---
+    // 入力制御
+    let touchPoints = new Map();
+    let initialPinchDist = 0;
+    let initialZoom = 1.0;
+    let isMoved = false;
+
+    // --- 1. ルーム管理・通信 ---
     socket.on('updateRoomList', (list) => {
-        const area = document.getElementById('roomList');
-        area.innerHTML = list.length ? "" : "<p style='text-align:center; color:#94a3b8;'>募集中の対局はありません</p>";
-        list.forEach(r => {
-            const d = document.createElement('div');
-            d.className = "card";
-            d.innerHTML = `
-                <b>${r.id} ${r.hasPassword ? '🔒' : ''}</b><br>
-                <small>${r.status} | ${r.playerCount}/2人</small>
-                <button class="btn-main" onclick="joinRoom('${r.id}', ${r.hasPassword})" ${r.playerCount >= 2 ? 'disabled' : ''}>参加</button>
+        const area = document.getElementById('room-list-container');
+        area.innerHTML = list.length === 0 ? '<p style="text-align:center; color:#94a3b8; margin-top:20px;">現在対局はありません</p>' : '';
+        
+        list.forEach(room => {
+            const el = document.createElement('div');
+            el.className = 'room-item';
+            el.innerHTML = `
+                <div>
+                    <b style="color:#1e293b">${room.id}</b><br>
+                    <small style="color:#64748b">${room.status} (${room.playerCount}/2) | ${room.timeLimit}s</small>
+                </div>
+                <button class="btn-primary" style="width:auto; padding:8px 20px;" 
+                    onclick="joinRoom('${room.id}', ${room.hasPassword})" 
+                    ${room.playerCount >= 2 ? 'disabled' : ''}>JOIN</button>
             `;
-            area.appendChild(d);
+            area.appendChild(el);
         });
     });
 
-    function createRoom() {
-        const id = document.getElementById('roomIdIn').value;
-        const pw = document.getElementById('roomPwIn').value;
-        const limit = document.getElementById('timeLimitIn').value;
-        if(!id) return alert("ルーム名必須");
-        socket.emit("createRoom", { roomId: id, password: pw, settings: { timeLimit: limit } });
+    function reqCreate() {
+        const rid = document.getElementById('create-id').value;
+        const rpw = document.getElementById('create-pw').value;
+        const rlimit = document.getElementById('create-limit').value;
+        if(!rid) return alert("ルーム名を入力してください");
+        socket.emit('createRoom', { roomId: rid, password: rpw, settings: { timeLimit: rlimit } });
     }
 
     function joinRoom(id, hasPw) {
-        const pw = hasPw ? prompt("パスワード") : "";
-        socket.emit("joinRoom", { roomId: id, password: pw });
+        const pw = hasPw ? prompt("Enter Password:") : "";
+        if(pw !== null) socket.emit('joinRoom', { roomId: id, password: pw });
     }
 
     socket.on('roomJoined', data => {
-        myRoom = data.roomId;
-        myIndex = data.playerIndex;
-        document.getElementById('lobby').style.display = 'none';
-        document.getElementById('game-screen').style.display = 'flex';
-        document.getElementById('displayRoomId').textContent = myRoom;
-        resize();
-        camX = 64; camY = 64;
+        mySide = data.playerIndex;
+        document.getElementById('lobby-ui').style.display = 'none';
+        document.getElementById('game-ui').style.display = 'flex';
+        document.getElementById('room-title-display').textContent = data.roomId;
+        resizeCanvas();
+        centerOn(64, 64);
     });
 
     socket.on('gameStart', () => {
-        isRunning = true;
-        updateUI();
-        render();
+        isGameActive = true;
+        refreshUI();
+        animate();
+    });
+
+    socket.on('moveMade', data => {
+        boardState.push(data.piece);
+        moveHistory.push({...data.piece});
+        currentTurn = data.nextTurn;
+        currentPairs = data.consecutivePairs;
+        
+        if(data.piece.player !== mySide) {
+            centerOn(data.piece.x, data.piece.y);
+        }
+        
+        refreshUI();
+        requestAnimationFrame(draw);
+    });
+
+    socket.on('timerUpdate', t => {
+        document.getElementById('timer-display').textContent = t + "s";
+    });
+
+    socket.on('gameOver', data => {
+        isGameActive = false;
+        const modal = document.getElementById('modal-overlay');
+        const title = document.getElementById('result-title');
+        const desc = document.getElementById('result-desc');
+
+        modal.style.display = 'flex';
+        if(data.winner === -1) {
+            title.textContent = "DRAW";
+            desc.textContent = "引き分けです。";
+        } else {
+            title.textContent = data.winner === mySide ? "VICTORY!" : "DEFEAT...";
+            desc.textContent = data.reason === "timeout" ? "時間切れによる決着です。" : "五目並び（対込み）が成立しました。";
+        }
+    });
+
+    socket.on('playerLeft', () => {
+        alert("対戦相手が退出しました。");
+        location.reload();
     });
 
     socket.on('error_msg', m => alert(m));
 
-    // --- Core Game Logic ---
-    socket.on('moveMade', data => {
-        board.push(data.piece);
-        history.push({...data.piece});
-        turn = data.nextTurn;
-        pairs = data.consecutivePairs;
-        if(data.piece.player !== myIndex) { camX = data.piece.x; camY = data.piece.y; }
-        updateUI();
-        render();
-    });
+    // --- 2. 高度な描画エンジン ---
+    function centerOn(gx, gy) { camX = gx; camY = gy; }
 
-    socket.on('timerUpdate', t => document.getElementById('timer').textContent = t + "s");
-
-    socket.on('gameOver', data => {
-        isRunning = false;
-        document.getElementById('modal').style.display = 'flex';
-        document.getElementById('modalTitle').textContent = data.winner === myIndex ? "勝利！" : (data.winner === -1 ? "引き分け" : "敗北...");
-        document.getElementById('modalMsg').textContent = data.reason === "timeout" ? "時間切れによる決着です。" : "五目並び（対込み）が成立しました。";
-    });
-
-    socket.on('playerLeft', () => {
-        alert("相手が退出しました");
-        location.reload();
-    });
-
-    // --- Rendering ---
-    function render() {
+    function draw() {
         if(!canvas.width) return;
-        ctx.clearRect(0,0,canvas.width, canvas.height);
+        ctx.fillStyle = "#0f172a"; // 余白部分
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const currentScale = CELL_SIZE * scale;
-        const offsetX = canvas.width/2 - camX * currentScale;
-        const offsetY = canvas.height/2 - camY * currentScale;
+        const sCell = CELL_PX * zoom;
+        const offX = canvas.width/2 - camX * sCell;
+        const offY = canvas.height/2 - camY * sCell;
 
-        // Background
+        // 盤面背景
         ctx.fillStyle = "#14532d";
-        ctx.fillRect(offsetX, offsetY, GRID_SIZE * currentScale, GRID_SIZE * currentScale);
+        ctx.fillRect(offX, offY, GRID_SIZE * sCell, GRID_SIZE * sCell);
 
-        // Grid
-        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+        // グリッド
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         for(let i=0; i<=GRID_SIZE; i++) {
-            ctx.moveTo(offsetX + i * currentScale, offsetY);
-            ctx.lineTo(offsetX + i * currentScale, offsetY + GRID_SIZE * currentScale);
-            ctx.moveTo(offsetX, offsetY + i * currentScale);
-            ctx.lineTo(offsetX + GRID_SIZE * currentScale, offsetY + i * currentScale);
+            ctx.moveTo(offX + i * sCell, offY);
+            ctx.lineTo(offX + i * sCell, offY + GRID_SIZE * sCell);
+            ctx.moveTo(offX, offY + i * sCell);
+            ctx.lineTo(offX + GRID_SIZE * sCell, offY + i * sCell);
         }
         ctx.stroke();
 
-        const list = isReview ? history.slice(0, reviewIdx) : board;
+        const activeSet = isReviewing ? moveHistory.slice(0, reviewIndex) : boardState;
 
-        // 【対の点線】描画
-        list.forEach((p1, i) => {
-            for(let j=i+1; j<list.length; j++){
-                const p2 = list[j];
-                if(p1.player === p2.player && isFacing(p1, p2)){
+        // 【対の点線】ロジック
+        ctx.save();
+        activeSet.forEach((p1, idx) => {
+            for(let j=idx+1; j<activeSet.length; j++) {
+                const p2 = activeSet[j];
+                if(p1.player === p2.player && checkFacing(p1, p2)) {
                     ctx.beginPath();
                     ctx.setLineDash([5, 5]);
-                    ctx.strokeStyle = "#ef4444";
-                    ctx.lineWidth = 2;
-                    ctx.moveTo(offsetX + p1.x * currentScale + currentScale/2, offsetY + p1.y * currentScale + currentScale/2);
-                    ctx.lineTo(offsetX + p2.x * currentScale + currentScale/2, offsetY + p2.y * currentScale + currentScale/2);
+                    ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+                    ctx.lineWidth = Math.max(2, sCell * 0.08);
+                    ctx.moveTo(offX + p1.x * sCell + sCell/2, offY + p1.y * sCell + sCell/2);
+                    ctx.lineTo(offX + p2.x * sCell + sCell/2, offY + p2.y * sCell + sCell/2);
                     ctx.stroke();
-                    ctx.setLineDash([]);
                 }
             }
         });
+        ctx.restore();
 
-        // 駒
-        list.forEach(p => {
-            const x = offsetX + p.x * currentScale + currentScale/2;
-            const y = offsetY + p.y * currentScale + currentScale/2;
-            
+        // 駒描画
+        activeSet.forEach(p => {
+            const px = offX + p.x * sCell + sCell/2;
+            const py = offY + p.y * sCell + sCell/2;
+
+            if(px < -sCell || px > canvas.width+sCell || py < -sCell || py > canvas.height+sCell) return;
+
             // 本体
             ctx.beginPath();
-            ctx.arc(x, y, currentScale*0.35, 0, Math.PI*2);
+            ctx.arc(px, py, sCell*0.35, 0, Math.PI*2);
             ctx.strokeStyle = p.player === 0 ? "#000" : "#fff";
-            ctx.lineWidth = currentScale * 0.12;
+            ctx.lineWidth = sCell * 0.12;
             ctx.stroke();
 
-            // 切れ目 (Landolt)
+            // 金色のランドルト環の切れ目
             ctx.beginPath();
-            const angleMap = [-Math.PI/2, 0, Math.PI/2, Math.PI];
-            const start = angleMap[p.direction] - 0.5;
-            const end = angleMap[p.direction] + 0.5;
-            ctx.arc(x, y, currentScale*0.35, start, end);
+            const rads = [-Math.PI/2, 0, Math.PI/2, Math.PI];
+            const start = rads[p.direction] - 0.45;
+            const end = rads[p.direction] + 0.45;
+            ctx.arc(px, py, sCell * 0.35, start, end);
             ctx.strokeStyle = "#fbbf24";
-            ctx.lineWidth = currentScale * 0.15;
+            ctx.lineWidth = sCell * 0.15;
             ctx.stroke();
         });
     }
 
-    function isFacing(p1, p2) {
+    function checkFacing(p1, p2) {
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
         if(Math.abs(dx) > 1 || Math.abs(dy) > 1) return false;
@@ -392,133 +521,150 @@
         return false;
     }
 
-    // --- Touch & Mouse Logic (Fixed) ---
-    let lastT1 = {x:0, y:0}, lastT2 = {x:0, y:0};
-    let isDrag = false, isPinch = false;
-    let moveThreshold = false;
+    // --- 3. スマホ・タブレット完全対応のマルチタッチ処理 ---
+    
+    // タッチ開始
+    container.addEventListener('touchstart', e => {
+        e.preventDefault();
+        isMoved = false;
+        for(let t of e.changedTouches) {
+            touchPoints.set(t.identifier, {x: t.clientX, y: t.clientY});
+        }
+        if(touchPoints.size === 2) {
+            const pts = Array.from(touchPoints.values());
+            initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            initialZoom = zoom;
+        }
+    }, { passive: false });
 
-    // Mouse Events
-    canvas.addEventListener('mousedown', e => {
+    // タッチ移動
+    container.addEventListener('touchmove', e => {
+        e.preventDefault();
+        const sCell = CELL_PX * zoom;
+
+        if(e.touches.length === 1) {
+            const t = e.touches[0];
+            const last = touchPoints.get(t.identifier);
+            if(last) {
+                const dx = t.clientX - last.x;
+                const dy = t.clientY - last.y;
+                if(Math.abs(dx) > 5 || Math.abs(dy) > 5) isMoved = true;
+                camX -= dx / sCell;
+                camY -= dy / sCell;
+                touchPoints.set(t.identifier, {x: t.clientX, y: t.clientY});
+            }
+        } else if(e.touches.length === 2) {
+            isMoved = true;
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+            const ratio = currentDist / initialPinchDist;
+            zoom = Math.max(0.4, Math.min(initialZoom * ratio, 4.0));
+        }
+        draw();
+    }, { passive: false });
+
+    // タッチ終了
+    container.addEventListener('touchend', e => {
+        e.preventDefault();
+        if(!isMoved && e.changedTouches.length === 1 && touchPoints.size === 1) {
+            const t = e.changedTouches[0];
+            const rect = canvas.getBoundingClientRect();
+            handleInteraction(t.clientX - rect.left, t.clientY - rect.top);
+        }
+        for(let t of e.changedTouches) touchPoints.delete(t.identifier);
+    }, { passive: false });
+
+    // マウス・ホイール (PC併用)
+    container.addEventListener('mousedown', e => {
         if(e.button !== 0) return;
-        isDrag = true; moveThreshold = false;
-        lastT1 = {x: e.clientX, y: e.clientY};
+        isMoved = false;
+        touchPoints.set('mouse', {x: e.clientX, y: e.clientY});
     });
     window.addEventListener('mousemove', e => {
-        if(!isDrag) return;
-        const dx = e.clientX - lastT1.x;
-        const dy = e.clientY - lastT1.y;
-        if(Math.abs(dx) > 2 || Math.abs(dy) > 2) moveThreshold = true;
-        camX -= dx / (CELL_SIZE * scale);
-        camY -= dy / (CELL_SIZE * scale);
-        lastT1 = {x: e.clientX, y: e.clientY};
-        render();
+        const last = touchPoints.get('mouse');
+        if(last) {
+            const dx = e.clientX - last.x;
+            const dy = e.clientY - last.y;
+            if(Math.abs(dx) > 3 || Math.abs(dy) > 3) isMoved = true;
+            camX -= dx / (CELL_PX * zoom);
+            camY -= dy / (CELL_PX * zoom);
+            touchPoints.set('mouse', {x: e.clientX, y: e.clientY});
+            draw();
+        }
     });
-    window.addEventListener('mouseup', () => isDrag = false);
-
-    canvas.addEventListener('click', e => {
-        if(moveThreshold) return;
+    window.addEventListener('mouseup', () => touchPoints.delete('mouse'));
+    container.addEventListener('click', e => {
+        if(isMoved) return;
         const rect = canvas.getBoundingClientRect();
-        handleAction(e.clientX - rect.left, e.clientY - rect.top);
+        handleInteraction(e.clientX - rect.left, e.clientY - rect.top);
     });
-
-    // Touch Events (Fully Controlled)
-    canvas.addEventListener('touchstart', e => {
+    container.addEventListener('wheel', e => {
         e.preventDefault();
-        moveThreshold = false;
-        if(e.touches.length === 1) {
-            isDrag = true; isPinch = false;
-            lastT1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
-        } else if(e.touches.length === 2) {
-            isDrag = false; isPinch = true;
-            lastT1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
-            lastT2 = {x: e.touches[1].clientX, y: e.touches[1].clientY};
-        }
-    }, {passive: false});
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        zoom = Math.max(0.4, Math.min(zoom * delta, 4.0));
+        draw();
+    }, { passive: false });
 
-    canvas.addEventListener('touchmove', e => {
-        e.preventDefault();
-        if(isDrag && e.touches.length === 1) {
-            const dx = e.touches[0].clientX - lastT1.x;
-            const dy = e.touches[0].clientY - lastT1.y;
-            if(Math.abs(dx) > 5 || Math.abs(dy) > 5) moveThreshold = true;
-            camX -= dx / (CELL_SIZE * scale);
-            camY -= dy / (CELL_SIZE * scale);
-            lastT1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
-        } else if(isPinch && e.touches.length === 2) {
-            moveThreshold = true;
-            const dPrev = Math.hypot(lastT1.x - lastT2.x, lastT1.y - lastT2.y);
-            const dCurr = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            const ratio = dCurr / dPrev;
-            scale = Math.max(0.4, Math.min(scale * ratio, 4.0));
-            lastT1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
-            lastT2 = {x: e.touches[1].clientX, y: e.touches[1].clientY};
-        }
-        render();
-    }, {passive: false});
+    // --- 4. 着手・勝敗判定 ---
+    function handleInteraction(sx, sy) {
+        if(!isGameActive || currentTurn !== mySide || isReviewing) return;
 
-    canvas.addEventListener('touchend', e => {
-        e.preventDefault();
-        if(!moveThreshold && !isPinch && isDrag) {
-            const rect = canvas.getBoundingClientRect();
-            const t = e.changedTouches[0];
-            handleAction(t.clientX - rect.left, t.clientY - rect.top);
-        }
-        isDrag = false; isPinch = false;
-    }, {passive: false});
+        const sCell = CELL_PX * zoom;
+        const offX = canvas.width/2 - camX * sCell;
+        const offY = canvas.height/2 - camY * sCell;
 
-    function handleAction(sx, sy) {
-        if(!isRunning || turn !== myIndex || isReview) return;
-
-        const currentScale = CELL_SIZE * scale;
-        const offsetX = canvas.width/2 - camX * currentScale;
-        const offsetY = canvas.height/2 - camY * currentScale;
-
-        const gx = Math.floor((sx - offsetX) / currentScale);
-        const gy = Math.floor((sy - offsetY) / currentScale);
+        const gx = Math.floor((sx - offX) / sCell);
+        const gy = Math.floor((sy - offY) / sCell);
 
         if(gx < 0 || gx >= GRID_SIZE || gy < 0 || gy >= GRID_SIZE) return;
-        if(board.find(p => p.x === gx && p.y === gy)) return;
+        if(boardState.find(p => p.x === gx && p.y === gy)) return;
 
-        // Pair Check
-        let isPair = false;
-        const oppPieces = board.filter(p => p.player !== myIndex);
-        const lastOpp = oppPieces[oppPieces.length - 1];
+        // 対の検証
+        let isPairAction = false;
+        const opps = boardState.filter(p => p.player !== mySide);
+        const lastOpp = opps[opps.length - 1];
         if(lastOpp) {
             const dx = gx - lastOpp.x;
             const dy = gy - lastOpp.y;
             if((lastOpp.direction === 0 && dy === -1) || (lastOpp.direction === 1 && dx === 1) ||
-               (lastOpp.direction === 2 && dy === 1) || (lastOpp.direction === 3 && dx === -1)) isPair = true;
+               (lastOpp.direction === 2 && dy === 1) || (lastOpp.direction === 3 && dx === -1)) isPairAction = true;
         }
 
-        if(isPair && pairs[myIndex] >= 3) return alert("連続対は3回までです");
+        if(isPairAction && currentPairs[mySide] >= 3) {
+            alert("「対」は3連続までです！");
+            return;
+        }
 
-        const nextPairs = [...pairs];
-        nextPairs[myIndex] = isPair ? nextPairs[myIndex] + 1 : 0;
+        const nextPairs = [...currentPairs];
+        nextPairs[mySide] = isPairAction ? nextPairs[mySide] + 1 : 0;
 
-        const newPiece = { x: gx, y: gy, direction: selectedDir, player: myIndex };
+        const piece = { x: gx, y: gy, direction: selDir, player: mySide };
         
-        // サーバーに送信 (ここを先に送ることで、サーバーからの応答でactiveTurnが更新されるのを待つ)
-        socket.emit("placePiece", { roomId: myRoom, piece: newPiece, consecutivePairs: nextPairs });
+        // ローカルでの仮置きはせず、サーバー経由で描画（整合性重視）
+        socket.emit('placePiece', { roomId: mySide === null ? "" : document.getElementById('room-title-display').textContent, piece, consecutivePairs: nextPairs });
 
-        if(checkWin(board.concat(newPiece), myIndex)) {
-            socket.emit("declareWin", { roomId: myRoom, winner: myIndex });
+        if(validateWin(boardState.concat(piece), mySide)) {
+            socket.emit('declareWin', { roomId: document.getElementById('room-title-display').textContent, winner: mySide });
         }
     }
 
-    function checkWin(all, pIdx) {
+    function validateWin(all, pIdx) {
         const mine = all.filter(p => p.player === pIdx);
-        const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+        const vectors = [[1,0], [0,1], [1,1], [1,-1]];
         for(let p of mine) {
-            for(let [dx, dy] of dirs) {
-                let count = 1;
-                let line = [p];
+            for(let [vx, vy] of vectors) {
+                let chain = [p];
                 for(let i=1; i<5; i++) {
-                    const found = mine.find(m => m.x === p.x + dx*i && m.y === p.y + dy*i);
-                    if(found) { count++; line.push(found); } else break;
+                    const found = mine.find(m => m.x === p.x + vx*i && m.y === p.y + vy*i);
+                    if(found) chain.push(found); else break;
                 }
-                if(count >= 5) {
-                    for(let l1 of line) {
-                        for(let l2 of all) { if(l1 !== l2 && isFacing(l1, l2)) return true; }
+                if(chain.length >= 5) {
+                    // 五目のなかに「対」が含まれているか
+                    for(let c1 of chain) {
+                        for(let c2 of all) {
+                            if(c1 !== c2 && checkFacing(c1, c2)) return true;
+                        }
                     }
                 }
             }
@@ -526,48 +672,56 @@
         return false;
     }
 
-    // --- Helpers ---
-    function setDir(d) {
-        selectedDir = d;
-        document.querySelectorAll('.dir-btn').forEach((b, i) => b.classList.toggle('active', i === d));
+    // --- 5. UI制御 & 感想戦 ---
+    function refreshUI() {
+        const ind = document.getElementById('turn-indicator');
+        const color = currentTurn === 0 ? "黒" : "白";
+        ind.textContent = currentTurn === mySide ? `★ あなたの番 (${color})` : `相手が考えています (${color})`;
+        ind.style.color = currentTurn === mySide ? "var(--accent)" : "#64748b";
+        document.getElementById('pair-stats').textContent = `PAIRS: B ${currentPairs[0]} / W ${currentPairs[1]}`;
     }
 
-    function updateUI() {
-        const lbl = document.getElementById('statusLabel');
-        lbl.textContent = turn === myIndex ? "★ あなたの番" : "相手の番";
-        lbl.style.color = turn === myIndex ? "var(--accent)" : "#64748b";
-        document.getElementById('pairInfo').textContent = `連続対: 黒${pairs[0]} 白${pairs[1]}`;
+    function updateSelDir(d) {
+        selDir = d;
+        document.querySelectorAll('.dir-button').forEach((b, i) => b.classList.toggle('active', i === d));
     }
 
-    function startReview() {
-        document.getElementById('modal').style.display = 'none';
-        isReview = true;
-        reviewIdx = history.length;
-        document.getElementById('review-ui').style.display = 'block';
-        updateReview();
-        render();
+    function initReviewMode() {
+        document.getElementById('modal-overlay').style.display = 'none';
+        document.getElementById('dir-panel').style.display = 'none';
+        document.getElementById('review-panel').style.display = 'flex';
+        isReviewing = true;
+        reviewIndex = moveHistory.length;
+        updateReviewUI();
+        draw();
     }
 
-    function changeReviewStep(d) {
-        reviewIdx = Math.max(0, Math.min(history.length, reviewIdx + d));
-        updateReview();
-        render();
+    function reviewMove(d) {
+        reviewIndex = Math.max(0, Math.min(moveHistory.length, reviewIndex + d));
+        if(reviewIndex > 0) {
+            const last = moveHistory[reviewIndex - 1];
+            centerOn(last.x, last.y);
+        }
+        updateReviewUI();
+        draw();
     }
 
-    function updateReview() {
-        document.getElementById('reviewText').textContent = `${reviewIdx} / ${history.length}`;
+    function updateReviewUI() {
+        document.getElementById('review-counter').textContent = `${reviewIndex} / ${moveHistory.length}`;
     }
 
-    function resize() {
+    function resizeCanvas() {
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
-        render();
+        draw();
     }
 
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', resizeCanvas);
+    function animate() { if(isGameActive || isReviewing) { draw(); } }
 </script>
 </body>
 </html>
+
 
 
 
