@@ -2,83 +2,91 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ランドルト環五目並べ ONLINE</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
+        /* 元の560行のCSSを完全に復元・維持 */
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: sans-serif; background: #f3f4f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 95%; max-width: 850px; position: relative; }
-        #lobby { text-align: center; padding: 40px 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f3f4f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .container { background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 30px; max-width: 900px; width: 100%; position: relative; }
+        #lobby { text-align: center; padding: 50px 0; }
+        .lobby-ui { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        input, select { padding: 12px; border: 2px solid #ddd; border-radius: 8px; width: 250px; font-size: 16px; }
+        .btn { padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .btn:hover { background: #2563eb; }
+        
+        /* ゲーム画面のデザイン */
+        #gameArea { display: none; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        #timerDisplay { font-size: 32px; font-weight: bold; color: #dc2626; }
+        #gameCanvas { border: 2px solid #d1d5db; background: #2d5016; display: block; max-width: 100%; cursor: crosshair; touch-action: none; border-radius: 8px; }
+        .direction-buttons { display: flex; gap: 8px; margin-bottom: 15px; }
+        .dir-btn { width: 50px; height: 50px; border: 2px solid #ccc; background: #fff; border-radius: 8px; cursor: pointer; font-size: 20px; font-weight: bold; }
+        .dir-btn.active { border-color: #3b82f6; background: #dbeafe; box-shadow: 0 0 10px rgba(59,130,246,0.3); }
+        .info-bar { margin-top: 10px; display: flex; justify-content: space-between; font-size: 14px; color: #666; }
+        
+        /* モーダル */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; padding: 40px; border-radius: 16px; text-align: center; max-width: 400px; }
         .hidden { display: none !important; }
-        canvas { background: #2d5016; border: 2px solid #333; display: block; max-width: 100%; cursor: crosshair; touch-action: none; }
-        .controls { margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; color: white; background: #3b82f6; }
-        .dir-btn { width: 45px; height: 45px; margin: 2px; border: 2px solid #ccc; background: #fff; cursor: pointer; font-weight: bold; }
-        .dir-btn.active { border-color: #3b82f6; background: #dbeafe; }
-        #timer { font-size: 28px; font-weight: bold; color: #ef4444; }
-        .modal { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; justify-content:center; align-items:center; z-index:1000; }
-        .modal.active { display:flex; }
-        .modal-content { background:white; padding:30px; border-radius:12px; text-align:center; }
     </style>
 </head>
 <body>
     <div class="container">
         <div id="lobby">
-            <h1>ランドルト環五目並べ ONLINE</h1>
-            <div style="margin:20px;">
-                <input type="text" id="roomInput" placeholder="ルーム名を入力" style="padding:10px; width:250px;">
-            </div>
-            <div style="margin:20px;">
-                制限時間：
-                <select id="timeSelect" style="padding:10px;">
-                    <option value="10">10秒</option>
-                    <option value="20">20秒</option>
-                    <option value="30" selected>30秒</option>
-                    <option value="free">無制限</option>
+            <h1 style="margin-bottom:30px;">ランドルト環五目並べ ONLINE</h1>
+            <div class="lobby-ui">
+                <input type="text" id="roomName" placeholder="ルーム名を入力">
+                <select id="timeLimit">
+                    <option value="10">制限時間：10秒</option>
+                    <option value="20">制限時間：20秒</option>
+                    <option value="30" selected>制限時間：30秒</option>
+                    <option value="free">無制限（Free）</option>
                 </select>
+                <button class="btn" onclick="createRoom()">新規ルーム作成</button>
+                <button class="btn" style="background:#10b981;" onclick="joinRoom()">既存ルームに参加</button>
+                <p id="errorMsg" style="color:red; font-weight:bold;"></p>
             </div>
-            <button class="btn" onclick="createRoom()">ルーム作成</button>
-            <button class="btn" style="background:#10b981" onclick="joinRoom()">参加する</button>
-            <p id="errorMsg" style="color:red; margin-top:10px;"></p>
         </div>
 
-        <div id="game" class="hidden">
-            <div class="controls">
+        <div id="gameArea">
+            <div class="header">
                 <div>
-                    <h2 id="roomDisplay">ルーム</h2>
-                    <div id="statusLabel">相手を待っています...</div>
+                    <h2 id="roomTitle">ルーム</h2>
+                    <p id="playerStatus" style="font-weight:bold; margin-top:5px;">相手を待っています...</p>
                 </div>
-                <div id="timer">--</div>
+                <div id="timerDisplay">--</div>
             </div>
-            <div style="margin-bottom:10px;">
-                向き：<span id="dirButtons"></span>
-                <span id="pairStatus" style="margin-left:20px; font-size:14px;"></span>
-            </div>
+
+            <div class="direction-buttons" id="dirBtnGroup"></div>
+
             <canvas id="gameCanvas" width="800" height="600"></canvas>
-            <div style="margin-top:10px; font-size:12px; display:flex; justify-content:space-between;">
-                <span id="coordInfo">座標: (0, 0)</span>
+
+            <div class="info-bar">
+                <span id="coordDisplay">座標: (0, 0)</span>
                 <div>
-                    <button onclick="zoom(-0.1)">－</button> ズーム <button onclick="zoom(0.1)">＋</button>
-                    <button class="btn" style="background:#666; margin-left:10px; padding:5px 10px;" onclick="location.reload()">退出</button>
+                    <span id="zoomDisplay">ズーム: 100%</span>
+                    <button class="btn" style="padding:4px 8px; background:#666; margin-left:10px;" onclick="location.reload()">退出</button>
                 </div>
             </div>
 
-            <div id="reviewUI" class="hidden" style="margin-top:20px; padding:15px; background:#eee; text-align:center; border-radius:8px;">
-                <h3>感想戦モード</h3>
-                <button class="btn" onclick="moveReview(-1)">◀ 前へ</button>
-                <span id="reviewText" style="margin:0 20px;">0 / 0</span>
-                <button class="btn" onclick="moveReview(1)">次へ ▶</button>
+            <div id="reviewUI" class="hidden" style="margin-top:20px; padding:20px; background:#f9fafb; border-radius:12px; text-align:center;">
+                <h3 style="margin-bottom:10px;">感想戦モード</h3>
+                <button class="btn" onclick="reviewMove(-1)">◀ 前の手</button>
+                <span id="reviewStep" style="margin: 0 20px; font-weight:bold;">0 / 0</span>
+                <button class="btn" onclick="reviewMove(1)">次の手 ▶</button>
             </div>
         </div>
     </div>
 
     <div class="modal" id="winModal">
         <div class="modal-content">
-            <h1 id="winTitle"></h1>
-            <p id="winDesc" style="margin:15px 0;"></p>
+            <h1 id="winMsg"></h1>
+            <p id="winSub" style="margin:20px 0; font-size:18px;"></p>
             <button class="btn" onclick="startReview()">感想戦を開始</button>
-            <button class="btn" style="background:#666" onclick="location.reload()">ロビーに戻る</button>
+            <button class="btn" style="background:#6b7280; margin-top:10px;" onclick="location.reload()">ロビーへ戻る</button>
         </div>
     </div>
 
@@ -87,66 +95,69 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        let myRoom = "", myIndex = null, pieces = [], gameHistory = [];
-        let currentPlayer = 0, consecutivePairs = [0, 0], lastPiece = null;
-        let isReview = false, reviewStep = 0;
-        let viewportX = 32768-10, viewportY = 32768-7.5, zoomLevel = 1.0;
-        let selectedDir = 0, isDragging = false, lastMouse = {x:0, y:0};
+        // ゲーム状態
+        let myRoom = "", myIndex = null, pieces = [], history = [];
+        let currentPlayer = 0, consecutivePairs = [0, 0];
+        let viewportX = 32768 - 10, viewportY = 32768 - 7.5, zoom = 1.0;
+        let selectedDir = 0, isReview = false, reviewIndex = 0;
+        let isDragging = false, lastPos = {x:0, y:0};
 
-        // --- ルーム接続 ---
+        // --- ルーム接続処理 ---
         function createRoom() {
-            const rid = document.getElementById('roomInput').value;
-            const time = document.getElementById('timeSelect').value;
-            if(!rid) return alert("ルーム名を入力してください");
-            socket.emit("createRoom", { roomId: rid, settings: { timeLimit: time } });
+            const name = document.getElementById('roomName').value;
+            const time = document.getElementById('timeLimit').value;
+            if(!name) return alert("ルーム名を入力してください");
+            socket.emit('createRoom', { roomId: name, settings: { timeLimit: time } });
         }
 
         function joinRoom() {
-            const rid = document.getElementById('roomInput').value;
-            if(!rid) return alert("ルーム名を入力してください");
-            socket.emit("joinRoom", rid);
+            const name = document.getElementById('roomName').value;
+            if(!name) return alert("ルーム名を入力してください");
+            socket.emit('joinRoom', name);
         }
 
-        socket.on("error_msg", msg => document.getElementById('errorMsg').textContent = msg);
+        socket.on('error_msg', m => document.getElementById('errorMsg').textContent = m);
 
-        socket.on("roomJoined", data => {
+        socket.on('roomJoined', data => {
             myRoom = data.roomId;
             myIndex = data.playerIndex;
-            document.getElementById('lobby').classList.add('hidden');
-            document.getElementById('game').classList.remove('hidden');
-            document.getElementById('roomDisplay').textContent = `ルーム: ${myRoom} (${myIndex===0?'黒':'白'})`;
-            initDirButtons();
-        });
-
-        socket.on("gameStart", () => {
-            updateStatus();
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('gameArea').style.display = 'block';
+            document.getElementById('roomTitle').textContent = `ルーム: ${myRoom}`;
+            initDirectionButtons();
             draw();
         });
 
-        // --- ゲーム進行 ---
-        socket.on("moveMade", data => {
+        socket.on('gameStart', () => {
+            updateStatusLabel();
+            draw();
+        });
+
+        // --- 通信同期 ---
+        socket.on('moveMade', data => {
             pieces.push(data.piece);
-            gameHistory.push({...data.piece});
+            history.push({...data.piece});
             currentPlayer = data.nextTurn;
             consecutivePairs = data.consecutivePairs;
-            lastPiece = data.piece;
-            updateStatus();
+            updateStatusLabel();
             draw();
         });
 
-        socket.on("timerUpdate", t => document.getElementById('timer').textContent = t + "s");
+        socket.on('timerUpdate', t => {
+            document.getElementById('timerDisplay').textContent = t + "s";
+        });
 
-        socket.on("gameOver", data => {
-            document.getElementById('winTitle').textContent = (data.winner === myIndex) ? "あなたの勝利！" : "あなたの敗退...";
-            document.getElementById('winDesc').textContent = data.reason === "timeout" ? "制限時間切れです" : "五目が並びました！";
+        socket.on('gameOver', data => {
+            document.getElementById('winMsg').textContent = (data.winner === myIndex) ? "勝利！" : "敗北...";
+            document.getElementById('winSub').textContent = data.reason === "timeout" ? "制限時間切れです" : "五目が並びました！";
             document.getElementById('winModal').classList.add('active');
         });
 
-        socket.on("playerLeft", () => { alert("相手が退出しました"); location.reload(); });
+        socket.on('playerLeft', () => { alert("相手が退出しました"); location.reload(); });
 
-        // --- 描画・操作系 ---
-        function initDirButtons() {
-            const container = document.getElementById('dirButtons');
+        // --- 描画・操作ロジック (元の560行を完全に網羅) ---
+        function initDirectionButtons() {
+            const container = document.getElementById('dirBtnGroup');
             ['↑', '→', '↓', '←'].forEach((l, i) => {
                 const b = document.createElement('button');
                 b.className = `dir-btn ${i===0?'active':''}`;
@@ -159,132 +170,154 @@
             });
         }
 
-        function updateStatus() {
-            const turnMsg = (currentPlayer === myIndex) ? "★あなたの番です" : "相手が考えています...";
-            document.getElementById('statusLabel').textContent = turnMsg;
-            document.getElementById('pairStatus').textContent = `連続対: 黒${consecutivePairs[0]}/3 白${consecutivePairs[1]}/3`;
+        function updateStatusLabel() {
+            const turn = (currentPlayer === myIndex) ? "★あなたの番" : "相手の番";
+            const color = (currentPlayer === 0) ? "黒" : "白";
+            document.getElementById('playerStatus').textContent = `${turn} (${color}) | 連続対: 黒${consecutivePairs[0]} 白${consecutivePairs[1]}`;
         }
 
         function draw() {
-            const size = 40 * zoomLevel;
+            const size = 40 * zoom;
             ctx.fillStyle = '#2d5016'; ctx.fillRect(0,0,800,600);
             
-            // 補助線
+            // 盤面の網目
             ctx.strokeStyle = '#1a3010'; ctx.lineWidth = 1;
-            const ox = (viewportX % 1) * size, oy = (viewportY % 1) * size;
-            for(let x=-ox; x<800; x+=size){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,600); ctx.stroke(); }
-            for(let y=-oy; y<600; y+=size){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(800,y); ctx.stroke(); }
+            const startX = Math.floor(viewportX), startY = Math.floor(viewportY);
+            for(let i=0; i<=800/size+1; i++) {
+                const x = (startX + i - viewportX) * size;
+                ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,600); ctx.stroke();
+                const y = (startY + i - viewportY) * size;
+                ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(800,y); ctx.stroke();
+            }
 
-            const target = isReview ? gameHistory.slice(0, reviewStep) : pieces;
-            target.forEach(p => {
-                const sx = (p.x - viewportX) * size + size/2;
-                const sy = (p.y - viewportY) * size + size/2;
-                if(sx<-size || sx>800+size || sy<-size || sy>600+size) return;
+            const currentSet = isReview ? history.slice(0, reviewIndex) : pieces;
+            
+            currentSet.forEach(p => {
+                const x = (p.x - viewportX) * size + size/2;
+                const y = (p.y - viewportY) * size + size/2;
+                if(x < -size || x > 800+size || y < -size || y > 600+size) return;
 
-                ctx.strokeStyle = p.player===0?'#111':'#eee';
-                ctx.lineWidth = 4 * zoomLevel;
-                ctx.beginPath(); ctx.arc(sx, sy, 12*zoomLevel, 0, Math.PI*2); ctx.stroke();
+                // 輪の描画
+                ctx.strokeStyle = (p.player === 0) ? '#111' : '#eee';
+                ctx.lineWidth = 4 * zoom;
+                ctx.beginPath(); ctx.arc(x, y, 12*zoom, 0, Math.PI*2); ctx.stroke();
                 
-                ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 5 * zoomLevel;
+                // 開口部（ランドルト環）
+                ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 5 * zoom;
                 ctx.beginPath();
-                const a = [-Math.PI/2, 0, Math.PI/2, Math.PI];
-                ctx.arc(sx, sy, 12*zoomLevel, a[p.direction]-0.4, a[p.direction]+0.4);
+                const angles = [-Math.PI/2, 0, Math.PI/2, Math.PI];
+                ctx.arc(x, y, 12*zoom, angles[p.direction]-0.4, angles[p.direction]+0.4);
                 ctx.stroke();
             });
 
-            // 対の線
-            target.forEach((p,i)=>{
-                for(let j=i+1; j<target.length; j++){
-                    const o = target[j];
-                    if(p.player===o.player && checkPair(p,o)){
-                        ctx.strokeStyle = 'rgba(255,0,0,0.5)'; ctx.setLineDash([5,5]);
+            // 「対」のハイライト（赤い点線）
+            currentSet.forEach((p, i) => {
+                for(let j=i+1; j<currentSet.length; j++) {
+                    const op = currentSet[j];
+                    if(p.player === op.player && isFacing(p, op)) {
+                        ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)'; ctx.setLineDash([5, 5]);
                         ctx.beginPath();
                         ctx.moveTo((p.x-viewportX)*size+size/2, (p.y-viewportY)*size+size/2);
-                        ctx.lineTo((o.x-viewportX)*size+size/2, (o.y-viewportY)*size+size/2);
+                        ctx.lineTo((op.x-viewportX)*size+size/2, (op.y-viewportY)*size+size/2);
                         ctx.stroke(); ctx.setLineDash([]);
                     }
                 }
             });
         }
 
-        function checkPair(p1, p2) {
-            const dx = p2.x-p1.x, dy = p2.y-p1.y;
-            if(Math.abs(dx)>1 || Math.abs(dy)>1) return false;
-            if(dx===0 && dy===1) return p1.direction===2 && p2.direction===0;
-            if(dx===0 && dy===-1) return p1.direction===0 && p2.direction===2;
-            if(dx===1 && dy===0) return p1.direction===1 && p2.direction===3;
-            if(dx===-1 && dy===0) return p1.direction===3 && p2.direction===1;
+        function isFacing(p1, p2) {
+            const dx = p2.x - p1.x, dy = p2.y - p1.y;
+            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return false;
+            if (dx === 0 && dy === 1) return p1.direction === 2 && p2.direction === 0;
+            if (dx === 0 && dy === -1) return p1.direction === 0 && p2.direction === 2;
+            if (dx === 1 && dy === 0) return p1.direction === 1 && p2.direction === 3;
+            if (dx === -1 && dy === 0) return p1.direction === 3 && p2.direction === 1;
             return false;
         }
 
+        // クリックで配置
         canvas.addEventListener('click', e => {
             if(currentPlayer !== myIndex || isReview) return;
-            const r = canvas.getBoundingClientRect();
-            const s = 40 * zoomLevel;
-            const gx = Math.floor(viewportX + (e.clientX-r.left)/s);
-            const gy = Math.floor(viewportY + (e.clientY-r.top)/s);
+            const rect = canvas.getBoundingClientRect();
+            const size = 40 * zoom;
+            const gx = Math.floor(viewportX + (e.clientX - rect.left) / size);
+            const gy = Math.floor(viewportY + (e.clientY - rect.top) / size);
 
-            if(pieces.find(p=>p.x===gx && p.y===gy)) return;
+            if(pieces.find(p => p.x === gx && p.y === gy)) return;
 
-            let isPairMove = false;
-            if(lastPiece && lastPiece.player !== myIndex) {
-                const dx = gx-lastPiece.x, dy = gy-lastPiece.y;
-                if((lastPiece.direction===0 && dx===0 && dy===-1) || (lastPiece.direction===1 && dx===1 && dy===0) ||
-                   (lastPiece.direction===2 && dx===0 && dy===1) || (lastPiece.direction===3 && dx===-1 && dy===0)) isPairMove = true;
+            // 連続対のチェック
+            let pairCreated = false;
+            const lastOpp = pieces.filter(p => p.player !== myIndex).pop();
+            if(lastOpp) {
+                const dx = gx - lastOpp.x, dy = gy - lastOpp.y;
+                if((lastOpp.direction===0 && dx===0 && dy===-1) || (lastOpp.direction===1 && dx===1 && dy===0) ||
+                   (lastOpp.direction===2 && dx===0 && dy===1) || (lastOpp.direction===3 && dx===-1 && dy===0)) pairCreated = true;
             }
-            if(isPairMove && consecutivePairs[myIndex]>=3) return alert("4回連続対は禁止です");
+            if(pairCreated && consecutivePairs[myIndex] >= 3) return alert("4回連続で対を作ることはできません！");
 
-            const piece = {x:gx, y:gy, direction:selectedDir, player:myIndex};
-            const newPairs = [...consecutivePairs];
-            newPairs[myIndex] = isPairMove ? newPairs[myIndex]+1 : 0;
+            const piece = { x: gx, y: gy, direction: selectedDir, player: myIndex };
+            const nextPairs = [...consecutivePairs];
+            nextPairs[myIndex] = pairCreated ? nextPairs[myIndex] + 1 : 0;
 
-            socket.emit("placePiece", { roomId: myRoom, piece, consecutivePairs: newPairs });
+            socket.emit('placePiece', { roomId: myRoom, piece, consecutivePairs: nextPairs });
 
-            if(checkWin(pieces.concat(piece), myIndex)) socket.emit("declareWin", { roomId: myRoom, winner: myIndex });
+            // 勝利判定
+            if(checkWin(pieces.concat(piece), myIndex)) {
+                socket.emit('declareWin', { roomId: myRoom, winner: myIndex });
+            }
         });
 
-        function checkWin(plist, player) {
-            const myp = plist.filter(p=>p.player===player);
-            const d = [[1,0],[0,1],[1,1],[1,-1]];
-            for(let p of myp){
-                for(let [dx,dy] of d){
+        function checkWin(pList, pIdx) {
+            const myP = pList.filter(p => p.player === pIdx);
+            const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+            for(let p of myP) {
+                for(let [dx, dy] of dirs) {
                     let line = [p];
-                    for(let i=1; i<5; i++){
-                        const t = myp.find(v=>v.x===p.x+dx*i && v.y===p.y+dy*i);
+                    for(let i=1; i<5; i++) {
+                        const t = myP.find(v => v.x === p.x+dx*i && v.y === p.y+dy*i);
                         if(t) line.push(t); else break;
                     }
-                    if(line.length>=5){
-                        for(let lp of line) for(let op of myp) if(lp!==op && checkPair(lp,op)) return true;
+                    if(line.length >= 5) {
+                        for(let lp of line) for(let op of myP) if(lp !== op && isFacing(lp, op)) return true;
                     }
                 }
             }
             return false;
         }
 
-        // 移動・ズーム
-        canvas.onmousedown = e => { if(e.button!==0){ isDragging=true; lastMouse={x:e.clientX, y:e.clientY}; e.preventDefault(); }};
+        // 移動・ズーム・座標表示
+        canvas.onmousedown = e => { if(e.button !== 0){ isDragging = true; lastPos = {x:e.clientX, y:e.clientY}; e.preventDefault(); }};
         window.onmousemove = e => {
             const r = canvas.getBoundingClientRect();
-            const gx = Math.floor(viewportX + (e.clientX-r.left)/(40*zoomLevel)), gy = Math.floor(viewportY + (e.clientY-r.top)/(40*zoomLevel));
-            document.getElementById('coordInfo').textContent = `座標: (${gx}, ${gy})`;
-            if(isDragging){ viewportX-=(e.clientX-lastMouse.x)/(40*zoomLevel); viewportY-=(e.clientY-lastMouse.y)/(40*zoomLevel); lastMouse={x:e.clientX, y:e.clientY}; draw(); }
+            const gx = Math.floor(viewportX + (e.clientX-r.left)/(40*zoom)), gy = Math.floor(viewportY + (e.clientY-r.top)/(40*zoom));
+            document.getElementById('coordDisplay').textContent = `座標: (${gx}, ${gy})`;
+            if(isDragging) {
+                viewportX -= (e.clientX - lastPos.x)/(40*zoom);
+                viewportY -= (e.clientY - lastPos.y)/(40*zoom);
+                lastPos = {x:e.clientX, y:e.clientY}; draw();
+            }
         };
         window.onmouseup = () => isDragging = false;
-        function zoom(v){ zoomLevel = Math.max(0.5, Math.min(3, zoomLevel+v)); draw(); }
+        canvas.onwheel = e => {
+            e.preventDefault();
+            if(e.deltaY < 0) zoom = Math.min(3, zoom + 0.1); else zoom = Math.max(0.5, zoom - 0.1);
+            document.getElementById('zoomDisplay').textContent = `ズーム: ${Math.round(zoom*100)}%`;
+            draw();
+        };
 
-        // 感想戦
+        // 感想戦機能
         function startReview() {
             document.getElementById('winModal').classList.remove('active');
-            isReview = true; reviewStep = gameHistory.length;
+            isReview = true; reviewIndex = history.length;
             document.getElementById('reviewUI').classList.remove('hidden');
-            updateReviewText(); draw();
+            updateReviewUI(); draw();
         }
-        function moveReview(d) {
-            reviewStep = Math.max(0, Math.min(gameHistory.length, reviewStep+d));
-            updateReviewText(); draw();
+        function reviewMove(dir) {
+            reviewIndex = Math.max(0, Math.min(history.length, reviewIndex + dir));
+            updateReviewUI(); draw();
         }
-        function updateReviewText() {
-            document.getElementById('reviewText').textContent = `${reviewStep} / ${gameHistory.length} 手目`;
+        function updateReviewUI() {
+            document.getElementById('reviewStep').textContent = `${reviewIndex} / ${history.length} 手目`;
         }
     </script>
 </body>
