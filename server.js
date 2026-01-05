@@ -8,56 +8,50 @@ const io = new Server(server);
 
 app.use(express.static("public"));
 
-// ルーム情報を保持するオブジェクト
 const rooms = {};
 
-// 公開可能なルーム一覧を作成するヘルパー関数
+// 公開用のルームリストを作成（パスワードの有無や人数を整理）
 function getPublicRoomList() {
-    return Object.values(rooms).map(r => {
-        return {
-            id: r.id,
-            playerCount: r.players.length,
-            hasPassword: r.password !== "",
-            status: r.players.length >= 2 ? "対局中" : "待機中"
-        };
-    });
+    return Object.values(rooms).map(r => ({
+        id: r.id,
+        playerCount: r.players.length,
+        hasPassword: r.password !== "",
+        status: r.players.length >= 2 ? "満員" : "募集中"
+    }));
 }
 
 io.on("connection", (socket) => {
-    console.log("A user connected:", socket.id);
-
-    // 接続時に現在のルーム一覧を送信
+    // 1. 接続した瞬間に最新のリストを送る
     socket.emit("updateRoomList", getPublicRoomList());
 
-    // ルーム作成処理
+    // ルーム作成
     socket.on("createRoom", (data) => {
         const { roomId, password, settings } = data;
-
         if (rooms[roomId]) {
-            socket.emit("error_msg", "そのルーム名は既に使われています。");
+            socket.emit("error_msg", "そのルーム名は既に存在します。");
             return;
         }
 
         rooms[roomId] = {
             id: roomId,
             password: password || "",
-            settings: settings, // timeLimitなど
+            settings: settings,
             players: [socket.id],
             board: [],
-            turn: 0, // 0: 黒, 1: 白
+            turn: 0,
             timer: null,
             timeLeft: settings.timeLimit === 'free' ? null : parseInt(settings.timeLimit),
             gameStarted: false
         };
 
         socket.join(roomId);
-        socket.emit("roomJoined", { roomId: roomId, playerIndex: 0 });
+        socket.emit("roomJoined", { roomId, playerIndex: 0 });
         
-        // 全ユーザーのロビー画面を更新
+        // 重要：作成されたことを「全員」に通知
         io.emit("updateRoomList", getPublicRoomList());
     });
 
-    // ルーム参加処理
+    // ルーム入室
     socket.on("joinRoom", (data) => {
         const { roomId, password } = data;
         const room = rooms[roomId];
@@ -67,71 +61,57 @@ io.on("connection", (socket) => {
             return;
         }
         if (room.players.length >= 2) {
-            socket.emit("error_msg", "このルームは満員です。");
+            socket.emit("error_msg", "満員です。");
             return;
         }
         if (room.password !== "" && room.password !== password) {
-            socket.emit("error_msg", "パスワードが正しくありません。");
+            socket.emit("error_msg", "パスワードが違います。");
             return;
         }
 
         room.players.push(socket.id);
         socket.join(roomId);
 
-        // 参加者に通知
-        socket.emit("roomJoined", { roomId: roomId, playerIndex: 1 });
-
-        // 2人揃ったのでゲーム開始
+        socket.emit("roomJoined", { roomId, playerIndex: 1 });
         room.gameStarted = true;
         io.to(roomId).emit("gameStart");
         
-        // ロビー一覧の更新
+        // 重要：入室があった（満員になった等）ことを「全員」に通知
         io.emit("updateRoomList", getPublicRoomList());
-
-        // タイマー開始
         startRoomTimer(roomId);
     });
 
-    // 駒が置かれた時の処理
+    // 駒の配置
     socket.on("placePiece", (data) => {
         const { roomId, piece, consecutivePairs } = data;
         const room = rooms[roomId];
-
         if (!room || !room.gameStarted) return;
 
-        // 盤面情報を更新
         room.board.push(piece);
-        
-        // ターンを交代 (0 <-> 1)
         room.turn = 1 - room.turn;
 
-        // 全員に指し手を通知
         io.to(roomId).emit("moveMade", {
-            piece: piece,
+            piece,
             nextTurn: room.turn,
-            consecutivePairs: consecutivePairs
+            consecutivePairs
         });
-
-        // タイマーをリセットして再開
         startRoomTimer(roomId);
     });
 
     // 勝利宣言
     socket.on("declareWin", (data) => {
-        const { roomId, winner, reason } = data;
+        const { roomId, winner } = data;
         const room = rooms[roomId];
         if (room) {
             if (room.timer) clearInterval(room.timer);
             room.gameStarted = false;
-            io.to(roomId).emit("gameOver", { winner: winner, reason: reason || "checkmate" });
+            io.to(roomId).emit("gameOver", { winner, reason: "checkmate" });
         }
     });
 
-    // タイマー管理関数
     function startRoomTimer(rid) {
         const room = rooms[rid];
         if (!room || room.settings.timeLimit === 'free') return;
-
         if (room.timer) clearInterval(room.timer);
 
         room.timeLeft = parseInt(room.settings.timeLimit);
@@ -140,24 +120,22 @@ io.on("connection", (socket) => {
         room.timer = setInterval(() => {
             room.timeLeft--;
             io.to(rid).emit("timerUpdate", room.timeLeft);
-
             if (room.timeLeft <= 0) {
                 clearInterval(room.timer);
                 room.gameStarted = false;
-                // 時間切れの場合、現在の手番でない方が勝利
-                const winner = 1 - room.turn;
-                io.to(rid).emit("gameOver", { winner: winner, reason: "timeout" });
+                io.to(rid).emit("gameOver", { winner: 1 - room.turn, reason: "timeout" });
             }
         }, 1000);
     }
 
-    // 切断時の処理
+    // 切断処理
     socket.on("disconnect", () => {
         for (const rid in rooms) {
             if (rooms[rid].players.includes(socket.id)) {
                 if (rooms[rid].timer) clearInterval(rooms[rid].timer);
                 io.to(rid).emit("playerLeft");
                 delete rooms[rid];
+                // 重要：ルームが消えたことを「全員」に通知
                 io.emit("updateRoomList", getPublicRoomList());
                 break;
             }
@@ -165,9 +143,7 @@ io.on("connection", (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+server.listen(process.env.PORT || 3000);
+
 
 
