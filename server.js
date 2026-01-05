@@ -1,8 +1,8 @@
 /**
- * ランドルト環五目並べ ONLINE - Server Side
- * 修正内容:
- * 1. ルーム情報のブロードキャストを徹底
- * 2. サーバーサイドでのターン管理とタイマー同期の安定化
+ * ランドルト環五目並べ ONLINE - サーバーサイド
+ * 修正点: 
+ * - リアルタイムでのルームリスト配信を強化
+ * - サーバー側でのターン管理の整合性を確保
  */
 
 const express = require("express");
@@ -17,7 +17,7 @@ app.use(express.static("public"));
 
 const rooms = {};
 
-// 公開用ルームリスト生成
+// 公開用ルームリストを取得
 function getPublicRooms() {
     return Object.values(rooms).map(room => ({
         id: room.id,
@@ -28,20 +28,20 @@ function getPublicRooms() {
     }));
 }
 
-// 全員にリストを送信
+// 全員へブロードキャスト
 function broadcastRoomList() {
     io.emit("updateRoomList", getPublicRooms());
 }
 
 io.on("connection", (socket) => {
-    // 接続時にリスト送信
+    // 接続時に現在のリストを送信
     socket.emit("updateRoomList", getPublicRooms());
 
     // ルーム作成
     socket.on("createRoom", (data) => {
         const { roomId, password, settings } = data;
         if (rooms[roomId]) {
-            socket.emit("error_msg", "そのルーム名は既に使われています。");
+            socket.emit("error_msg", "そのルーム名は既に存在します。");
             return;
         }
 
@@ -62,7 +62,7 @@ io.on("connection", (socket) => {
         broadcastRoomList();
     });
 
-    // ルーム参加
+    // ルーム入室
     socket.on("joinRoom", (data) => {
         const { roomId, password } = data;
         const room = rooms[roomId];
@@ -90,7 +90,7 @@ io.on("connection", (socket) => {
         startTimer(roomId);
     });
 
-    // 着手
+    // 駒の配置
     socket.on("placePiece", (data) => {
         const { roomId, piece, consecutivePairs } = data;
         const room = rooms[roomId];
@@ -107,7 +107,7 @@ io.on("connection", (socket) => {
         startTimer(roomId);
     });
 
-    // 勝利
+    // 勝利宣言
     socket.on("declareWin", (data) => {
         const { roomId, winner } = data;
         const room = rooms[roomId];
@@ -151,6 +151,7 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+server.listen(PORT, () => console.log(`Listening on ${PORT}`));
+
 
 
