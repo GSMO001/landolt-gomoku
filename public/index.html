@@ -2,333 +2,722 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LANDOLT ONLINE - GOMOKU PLUS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ランドルト環五目並べ ONLINE</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        :root { --blue: #3b82f6; --dark: #0f172a; --green: #064e3b; }
-        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        body { font-family:-apple-system, sans-serif; background:var(--dark); height:100vh; overflow:hidden; display:flex; justify-content:center; }
-        .app { width:100%; max-width:500px; background:#fff; height:100%; display:flex; flex-direction:column; position:relative; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        :root {
+            --bg-deep: #14532d; /* 指定の深緑 */
+            --ui-white: #ffffff;
+            --ui-gray: #f1f5f9;
+            --accent: #2563eb;
+            --danger: #dc2626;
+            --gold: #fbbf24;
+        }
+
+        /* ブラウザのデフォルト動作を完全に殺す */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: none; 
+            overscroll-behavior: none;
+        }
+
+        body {
+            font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+            background: #0f172a;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .app-shell {
+            width: 100%;
+            max-width: 600px;
+            height: 100%;
+            background: var(--ui-white);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+        }
+
+        /* --- LOBBY UI --- */
+        #lobby-ui {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .hero-title {
+            font-size: 28px;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 24px;
+            color: #1e293b;
+        }
+
+        .setup-card {
+            background: var(--ui-gray);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .input-group { margin-bottom: 16px; }
+        label { display: block; font-size: 14px; font-weight: bold; color: #475569; margin-bottom: 6px; }
         
-        /* Lobby */
-        #lobby { flex:1; display:flex; flex-direction:column; padding:20px; overflow:hidden; }
-        .setup-card { background:#f8fafc; padding:20px; border-radius:16px; margin-bottom:20px; border:1px solid #e2e8f0; }
-        input, select { width:100%; padding:14px; margin-bottom:12px; border-radius:10px; border:1px solid #cbd5e1; font-size:16px; outline:none; }
-        input:focus { border-color:var(--blue); ring: 2px var(--blue); }
-        .btn-main { width:100%; padding:14px; background:var(--blue); color:#fff; border:none; border-radius:10px; font-weight:bold; font-size:16px; cursor:pointer; transition: opacity 0.2s; }
-        .btn-main:active { opacity: 0.8; }
-        
-        #room-list { flex:1; overflow-y:auto; border-radius:12px; background:#fff; border:1px solid #e2e8f0; }
-        .room-item { padding:16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center; }
-        
-        /* Game Screen */
-        #game { display:none; flex-direction:column; height:100%; position:absolute; inset:0; background:#fff; z-index:100; }
-        .game-bar { padding:12px 16px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#fff; }
-        #canvas-container { flex:1; background:var(--green); position:relative; overflow:hidden; touch-action:none; }
-        canvas { display:block; width:100%; height:100%; }
-        
-        .game-controls { padding:16px 20px 34px; border-top:1px solid #e2e8f0; background:#fff; }
-        .timer-track { height:6px; background:#f1f5f9; border-radius:3px; margin-bottom:12px; overflow:hidden; }
-        #timer-fill { height:100%; background:var(--blue); width:100%; transition: width 1s linear; }
-        
-        .dir-selector { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px; }
-        .dir-btn { height:50px; border:2px solid #e2e8f0; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px; cursor:pointer; background:#fff; transition: all 0.2s; }
-        .dir-btn.active { background:var(--blue); color:#fff; border-color:var(--blue); transform: scale(1.05); }
-        
-        #pair-info { text-align:center; font-weight:800; color:var(--dark); margin-bottom:8px; font-variant-numeric: tabular-nums; }
+        input, select {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+            font-size: 16px;
+            background: white;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus { border-color: var(--accent); }
+
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);
+        }
+
+        .room-item {
+            background: white;
+            border: 2px solid #f1f5f9;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.1s;
+        }
+        .room-item:active { transform: scale(0.98); }
+
+        /* --- GAME UI --- */
+        #game-ui {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .game-header {
+            padding: 12px 20px;
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        #timer-display {
+            font-size: 32px;
+            font-weight: 800;
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--danger);
+        }
+
+        #viewport-container {
+            flex: 1;
+            background: var(--bg-deep);
+            position: relative;
+            cursor: grab;
+        }
+
+        #viewport-container:active { cursor: grabbing; }
+
+        canvas { display: block; width: 100%; height: 100%; }
+
+        .game-footer {
+            background: white;
+            padding: 16px 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .direction-panel {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .dir-button {
+            height: 60px;
+            border: 3px solid #f1f5f9;
+            background: white;
+            border-radius: 14px;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            transition: all 0.2s;
+        }
+
+        .dir-button.active {
+            border-color: var(--accent);
+            background: #eff6ff;
+            color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37,99,235,0.2);
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: #475569;
+        }
+
+        /* --- OVERLAYS --- */
+        .modal-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            padding: 40px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .result-card {
+            background: white;
+            width: 100%;
+            border-radius: 24px;
+            padding: 32px;
+            text-align: center;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .review-controls {
+            display: none;
+            background: #1e293b;
+            padding: 12px;
+            border-radius: 40px;
+            margin-bottom: 12px;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+        .rev-btn {
+            background: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 22px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
-<div class="app">
-    <div id="lobby">
-        <h1 style="text-align:center; margin-bottom:20px; color:var(--dark);">LANDOLT ONLINE</h1>
+<div class="app-shell">
+    <div id="lobby-ui">
+        <h1 class="hero-title">LANDOLT GOMOKU</h1>
+        
         <div class="setup-card">
-            <input type="text" id="roomIdField" placeholder="ルーム名を入力">
-            <input type="password" id="pwField" placeholder="パスワード(任意)">
-            <select id="timeField">
-                <option value="none">時間無制限</option>
-                <option value="30">30秒</option>
-                <option value="60" selected>60秒</option>
-                <option value="120">120秒</option>
-            </select>
-            <button class="btn-main" onclick="onCreate()">ルームを作成</button>
+            <div class="input-group">
+                <label>ROOM NAME</label>
+                <input type="text" id="create-id" placeholder="名前を付けてください">
+            </div>
+            <div class="input-group">
+                <label>PASSWORD (OPTIONAL)</label>
+                <input type="password" id="create-pw" placeholder="秘密の対局に">
+            </div>
+            <div class="input-group">
+                <label>TIME LIMIT</label>
+                <select id="create-limit">
+                    <option value="30">30 Seconds</option>
+                    <option value="60">60 Seconds</option>
+                    <option value="free">No Limit</option>
+                </select>
+            </div>
+            <button class="btn-primary" onclick="reqCreate()">CREATE NEW ROOM</button>
         </div>
-        <div id="room-list"></div>
+
+        <div id="room-list-container">
+            </div>
     </div>
 
-    <div id="game">
-        <div class="game-bar">
-            <div><b id="ui-room-id">--</b><br><small id="ui-turn-status">読み込み中...</small></div>
-            <div id="ui-timer-text" style="font-size:20px; font-weight:bold; color:var(--blue);">∞</div>
-        </div>
-        <div class="timer-track"><div id="timer-fill"></div></div>
-        <div id="canvas-container"><canvas id="game-canvas"></canvas></div>
-        <div class="game-controls">
-            <div id="pair-info">PAIRS: 0 / 0</div>
-            <div class="dir-selector">
-                <div id="d0" class="dir-btn active" onclick="updateDir(0)">↑</div>
-                <div id="d1" class="dir-btn" onclick="updateDir(1)">→</div>
-                <div id="d2" class="dir-btn" onclick="updateDir(2)">↓</div>
-                <div id="d3" class="dir-btn" onclick="updateDir(3)">←</div>
+    <div id="game-ui">
+        <div class="game-header">
+            <div>
+                <b id="room-title-display">---</b><br>
+                <span id="turn-indicator" style="font-size:12px">WAITING...</span>
             </div>
-            <button onclick="location.reload()" style="width:100%; border:none; background:none; color:#ef4444; font-size:13px; font-weight:600; cursor:pointer;">退出してロビーに戻る</button>
+            <div id="timer-display">--</div>
+        </div>
+
+        <div id="viewport-container">
+            <canvas id="main-canvas"></canvas>
+        </div>
+
+        <div class="game-footer">
+            <div id="review-panel" class="review-controls">
+                <button class="rev-btn" onclick="reviewMove(-1)">◀</button>
+                <span id="review-counter" style="color:white; font-family:monospace">0 / 0</span>
+                <button class="rev-btn" onclick="reviewMove(1)">▶</button>
+            </div>
+
+            <div class="direction-panel" id="dir-panel">
+                <div class="dir-button active" onclick="updateSelDir(0)">↑</div>
+                <div class="dir-button" onclick="updateSelDir(1)">→</div>
+                <div class="dir-button" onclick="updateSelDir(2)">↓</div>
+                <div class="dir-button" onclick="updateSelDir(3)">←</div>
+            </div>
+
+            <div class="status-row">
+                <span id="pair-stats">PAIRS: B 0 / W 0</span>
+                <button onclick="location.reload()" style="border:none; background:none; color:var(--danger); font-weight:bold;">LEAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="result-card">
+            <h2 id="result-title" style="font-size:32px; margin-bottom:8px">VICTORY!</h2>
+            <p id="result-desc" style="margin-bottom:24px; color:#64748b">五目並びが成立しました。</p>
+            <button class="btn-primary" onclick="initReviewMode()" style="margin-bottom:12px">感想戦を行う</button>
+            <button class="btn-primary" style="background:#64748b" onclick="location.reload()">ロビーへ戻る</button>
         </div>
     </div>
 </div>
 
 <script>
+    /**
+     * LANDOLT GOMOKU - ADVANCED CLIENT ENGINE
+     */
     const socket = io();
-    const canvas = document.getElementById('game-canvas'), ctx = canvas.getContext('2d', {alpha:false});
-    const container = document.getElementById('canvas-container');
+    const canvas = document.getElementById('main-canvas');
+    const ctx = canvas.getContext('2d', { alpha: false }); // パフォーマンス向上
+    const container = document.getElementById('viewport-container');
 
-    let myIndex = null, currentTurn = 0, boardData = [], pairStats = [0, 0], isLive = false, limitSec = "none";
-    let view = {x:64, y:64, zoom:1.0}, selectedDir = 0;
-    let inputState = {isMoving:false, lastX:0, lastY:0, lastDist:0, isDown:false};
+    // システム定数
+    const GRID_SIZE = 128;
+    const CELL_PX = 40;
 
-    // --- Lobby ---
-    socket.on('updateRoomList', list => {
-        const listEl = document.getElementById('room-list');
-        listEl.innerHTML = list.length ? "" : "<p style='padding:20px; text-align:center; color:#64748b;'>現在募集中のルームはありません</p>";
-        list.forEach(r => {
-            const item = document.createElement('div');
-            item.className = 'room-item';
-            item.innerHTML = `<div><b>${r.roomId}</b><br><small>${r.status} (${r.count}/2)</small></div>
-                             <button class="btn-main" style="width:auto; padding:8px 16px;" onclick="onJoin('${r.roomId}', ${r.hasPw})">参加</button>`;
-            listEl.appendChild(item);
+    // ゲーム同期データ
+    let mySide = null;
+    let currentTurn = 0;
+    let boardState = [];
+    let moveHistory = [];
+    let currentPairs = [0, 0];
+    let isGameActive = false;
+
+    // 表示系パラメータ（高精度変位管理）
+    let camX = 64, camY = 64;
+    let zoom = 1.0;
+    let selDir = 0;
+    let isReviewing = false;
+    let reviewIndex = 0;
+
+    // 入力制御
+    let touchPoints = new Map();
+    let initialPinchDist = 0;
+    let initialZoom = 1.0;
+    let isMoved = false;
+
+    // --- 1. ルーム管理・通信 ---
+    socket.on('updateRoomList', (list) => {
+        const area = document.getElementById('room-list-container');
+        area.innerHTML = list.length === 0 ? '<p style="text-align:center; color:#94a3b8; margin-top:20px;">現在対局はありません</p>' : '';
+        
+        list.forEach(room => {
+            const el = document.createElement('div');
+            el.className = 'room-item';
+            el.innerHTML = `
+                <div>
+                    <b style="color:#1e293b">${room.id}</b><br>
+                    <small style="color:#64748b">${room.status} (${room.playerCount}/2) | ${room.timeLimit}s</small>
+                </div>
+                <button class="btn-primary" style="width:auto; padding:8px 20px;" 
+                    onclick="joinRoom('${room.id}', ${room.hasPassword})" 
+                    ${room.playerCount >= 2 ? 'disabled' : ''}>JOIN</button>
+            `;
+            area.appendChild(el);
         });
     });
 
-    function onCreate() {
-        const id = document.getElementById('roomIdField').value;
-        const pw = document.getElementById('pwField').value;
-        const tm = document.getElementById('timeField').value;
-        if(id) socket.emit('createRoom', { roomId: id, password: pw, timeLimit: tm });
+    function reqCreate() {
+        const rid = document.getElementById('create-id').value;
+        const rpw = document.getElementById('create-pw').value;
+        const rlimit = document.getElementById('create-limit').value;
+        if(!rid) return alert("ルーム名を入力してください");
+        socket.emit('createRoom', { roomId: rid, password: rpw, settings: { timeLimit: rlimit } });
     }
 
-    function onJoin(id, hasPw) {
-        const pw = hasPw ? prompt("パスワードを入力してください:") : "";
+    function joinRoom(id, hasPw) {
+        const pw = hasPw ? prompt("Enter Password:") : "";
         if(pw !== null) socket.emit('joinRoom', { roomId: id, password: pw });
     }
 
-    // --- Socket Events ---
-    socket.on('roomJoined', d => {
-        myIndex = d.playerIndex; limitSec = d.timeLimit;
-        document.getElementById('lobby').style.display = 'none';
-        document.getElementById('game').style.display = 'flex';
-        document.getElementById('ui-room-id').textContent = d.roomId;
-        initResize();
+    socket.on('roomJoined', data => {
+        mySide = data.playerIndex;
+        document.getElementById('lobby-ui').style.display = 'none';
+        document.getElementById('game-ui').style.display = 'flex';
+        document.getElementById('room-title-display').textContent = data.roomId;
+        resizeCanvas();
+        centerOn(64, 64);
     });
 
-    socket.on('gameStart', () => { isLive = true; updateStatusUI(); render(); });
-    
-    socket.on('timerUpdate', d => {
-        if(limitSec === "none") return;
-        document.getElementById('ui-timer-text').textContent = d.timeLeft + "s";
-        document.getElementById('timer-fill').style.width = (d.timeLeft / parseInt(limitSec) * 100) + "%";
+    socket.on('gameStart', () => {
+        isGameActive = true;
+        refreshUI();
+        animate();
     });
 
-    socket.on('moveMade', d => {
-        boardData.push(d.piece); currentTurn = d.nextTurn; pairStats = d.consecutivePairs;
-        updateStatusUI(); render();
+    socket.on('moveMade', data => {
+        boardState.push(data.piece);
+        moveHistory.push({...data.piece});
+        currentTurn = data.nextTurn;
+        currentPairs = data.consecutivePairs;
+        
+        if(data.piece.player !== mySide) {
+            centerOn(data.piece.x, data.piece.y);
+        }
+        
+        refreshUI();
+        requestAnimationFrame(draw);
     });
 
-    socket.on('gameOver', d => {
-        let text = d.reason === "TIMEOUT" ? "時間切れ！" : "決着！";
-        text += (d.winner === myIndex ? "\nあなたの勝利です！" : "\n相手の勝利です。");
-        if(d.winner === null) text = "引き分けです！";
-        alert(text);
+    socket.on('timerUpdate', t => {
+        document.getElementById('timer-display').textContent = t + "s";
+    });
+
+    socket.on('gameOver', data => {
+        isGameActive = false;
+        const modal = document.getElementById('modal-overlay');
+        const title = document.getElementById('result-title');
+        const desc = document.getElementById('result-desc');
+
+        modal.style.display = 'flex';
+        if(data.winner === -1) {
+            title.textContent = "DRAW";
+            desc.textContent = "引き分けです。";
+        } else {
+            title.textContent = data.winner === mySide ? "VICTORY!" : "DEFEAT...";
+            desc.textContent = data.reason === "timeout" ? "時間切れによる決着です。" : "五目並び（対込み）が成立しました。";
+        }
+    });
+
+    socket.on('playerLeft', () => {
+        alert("対戦相手が退出しました。");
         location.reload();
     });
 
-    socket.on('playerLeft', () => { alert("対戦相手が切断しました。"); location.reload(); });
     socket.on('error_msg', m => alert(m));
 
-    // --- Victory Algorithm (以前の正常動作版) ---
-    function checkWinner(board, x, y, player) {
-        const directions = [[1,0],[0,1],[1,1],[1,-1]];
-        const boardMap = new Map();
-        board.forEach(p => boardMap.set(`${p.x},${p.y}`, p));
+    // --- 2. 高度な描画エンジン ---
+    function centerOn(gx, gy) { camX = gx; camY = gy; }
 
-        for(let [dx, dy] of directions) {
-            let count = 1;
-            let stonesInLine = [boardMap.get(`${x},${y}`)];
+    function draw() {
+        if(!canvas.width) return;
+        ctx.fillStyle = "#0f172a"; // 余白部分
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 正方向
-            for(let i=1; i<6; i++){
-                const s = boardMap.get(`${x+dx*i},${y+dy*i}`);
-                if(s && s.player === player) { count++; stonesInLine.push(s); } else break;
+        const sCell = CELL_PX * zoom;
+        const offX = canvas.width/2 - camX * sCell;
+        const offY = canvas.height/2 - camY * sCell;
+
+        // 盤面背景
+        ctx.fillStyle = "#14532d";
+        ctx.fillRect(offX, offY, GRID_SIZE * sCell, GRID_SIZE * sCell);
+
+        // グリッド
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i=0; i<=GRID_SIZE; i++) {
+            ctx.moveTo(offX + i * sCell, offY);
+            ctx.lineTo(offX + i * sCell, offY + GRID_SIZE * sCell);
+            ctx.moveTo(offX, offY + i * sCell);
+            ctx.lineTo(offX + GRID_SIZE * sCell, offY + i * sCell);
+        }
+        ctx.stroke();
+
+        const activeSet = isReviewing ? moveHistory.slice(0, reviewIndex) : boardState;
+
+        // 【対の点線】ロジック
+        ctx.save();
+        activeSet.forEach((p1, idx) => {
+            for(let j=idx+1; j<activeSet.length; j++) {
+                const p2 = activeSet[j];
+                if(p1.player === p2.player && checkFacing(p1, p2)) {
+                    ctx.beginPath();
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+                    ctx.lineWidth = Math.max(2, sCell * 0.08);
+                    ctx.moveTo(offX + p1.x * sCell + sCell/2, offY + p1.y * sCell + sCell/2);
+                    ctx.lineTo(offX + p2.x * sCell + sCell/2, offY + p2.y * sCell + sCell/2);
+                    ctx.stroke();
+                }
             }
-            // 逆方向
-            for(let i=1; i<6; i++){
-                const s = boardMap.get(`${x-dx*i},${y-dy*i}`);
-                if(s && s.player === player) { count++; stonesInLine.push(s); } else break;
-            }
+        });
+        ctx.restore();
 
-            if(count >= 5) {
-                // 5並びの中に、相手の石と「対」になっている石が1つでもあるか確認
-                const hasPair = stonesInLine.some(s => {
-                    // 自分の石の開口部(direction)の先に相手の石があるか
-                    let tx = s.x, ty = s.y;
-                    if(s.direction === 0) ty--; else if(s.direction === 1) tx++;
-                    else if(s.direction === 2) ty++; else if(s.direction === 3) tx--;
-                    const target = boardMap.get(`${tx},${ty}`);
-                    return target && target.player !== player;
-                });
-                if(hasPair) return true;
+        // 駒描画
+        activeSet.forEach(p => {
+            const px = offX + p.x * sCell + sCell/2;
+            const py = offY + p.y * sCell + sCell/2;
+
+            if(px < -sCell || px > canvas.width+sCell || py < -sCell || py > canvas.height+sCell) return;
+
+            // 本体
+            ctx.beginPath();
+            ctx.arc(px, py, sCell*0.35, 0, Math.PI*2);
+            ctx.strokeStyle = p.player === 0 ? "#000" : "#fff";
+            ctx.lineWidth = sCell * 0.12;
+            ctx.stroke();
+
+            // 金色のランドルト環の切れ目
+            ctx.beginPath();
+            const rads = [-Math.PI/2, 0, Math.PI/2, Math.PI];
+            const start = rads[p.direction] - 0.45;
+            const end = rads[p.direction] + 0.45;
+            ctx.arc(px, py, sCell * 0.35, start, end);
+            ctx.strokeStyle = "#fbbf24";
+            ctx.lineWidth = sCell * 0.15;
+            ctx.stroke();
+        });
+    }
+
+    function checkFacing(p1, p2) {
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        if(Math.abs(dx) > 1 || Math.abs(dy) > 1) return false;
+        if(dx === 0 && dy === -1) return p1.direction === 0 && p2.direction === 2;
+        if(dx === 1 && dy === 0) return p1.direction === 1 && p2.direction === 3;
+        if(dx === 0 && dy === 1) return p1.direction === 2 && p2.direction === 0;
+        if(dx === -1 && dy === 0) return p1.direction === 3 && p2.direction === 1;
+        return false;
+    }
+
+    // --- 3. スマホ・タブレット完全対応のマルチタッチ処理 ---
+    
+    // タッチ開始
+    container.addEventListener('touchstart', e => {
+        e.preventDefault();
+        isMoved = false;
+        for(let t of e.changedTouches) {
+            touchPoints.set(t.identifier, {x: t.clientX, y: t.clientY});
+        }
+        if(touchPoints.size === 2) {
+            const pts = Array.from(touchPoints.values());
+            initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            initialZoom = zoom;
+        }
+    }, { passive: false });
+
+    // タッチ移動
+    container.addEventListener('touchmove', e => {
+        e.preventDefault();
+        const sCell = CELL_PX * zoom;
+
+        if(e.touches.length === 1) {
+            const t = e.touches[0];
+            const last = touchPoints.get(t.identifier);
+            if(last) {
+                const dx = t.clientX - last.x;
+                const dy = t.clientY - last.y;
+                if(Math.abs(dx) > 5 || Math.abs(dy) > 5) isMoved = true;
+                camX -= dx / sCell;
+                camY -= dy / sCell;
+                touchPoints.set(t.identifier, {x: t.clientX, y: t.clientY});
+            }
+        } else if(e.touches.length === 2) {
+            isMoved = true;
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+            const ratio = currentDist / initialPinchDist;
+            zoom = Math.max(0.4, Math.min(initialZoom * ratio, 4.0));
+        }
+        draw();
+    }, { passive: false });
+
+    // タッチ終了
+    container.addEventListener('touchend', e => {
+        e.preventDefault();
+        if(!isMoved && e.changedTouches.length === 1 && touchPoints.size === 1) {
+            const t = e.changedTouches[0];
+            const rect = canvas.getBoundingClientRect();
+            handleInteraction(t.clientX - rect.left, t.clientY - rect.top);
+        }
+        for(let t of e.changedTouches) touchPoints.delete(t.identifier);
+    }, { passive: false });
+
+    // マウス・ホイール (PC併用)
+    container.addEventListener('mousedown', e => {
+        if(e.button !== 0) return;
+        isMoved = false;
+        touchPoints.set('mouse', {x: e.clientX, y: e.clientY});
+    });
+    window.addEventListener('mousemove', e => {
+        const last = touchPoints.get('mouse');
+        if(last) {
+            const dx = e.clientX - last.x;
+            const dy = e.clientY - last.y;
+            if(Math.abs(dx) > 3 || Math.abs(dy) > 3) isMoved = true;
+            camX -= dx / (CELL_PX * zoom);
+            camY -= dy / (CELL_PX * zoom);
+            touchPoints.set('mouse', {x: e.clientX, y: e.clientY});
+            draw();
+        }
+    });
+    window.addEventListener('mouseup', () => touchPoints.delete('mouse'));
+    container.addEventListener('click', e => {
+        if(isMoved) return;
+        const rect = canvas.getBoundingClientRect();
+        handleInteraction(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    container.addEventListener('wheel', e => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        zoom = Math.max(0.4, Math.min(zoom * delta, 4.0));
+        draw();
+    }, { passive: false });
+
+    // --- 4. 着手・勝敗判定 ---
+    function handleInteraction(sx, sy) {
+        if(!isGameActive || currentTurn !== mySide || isReviewing) return;
+
+        const sCell = CELL_PX * zoom;
+        const offX = canvas.width/2 - camX * sCell;
+        const offY = canvas.height/2 - camY * sCell;
+
+        const gx = Math.floor((sx - offX) / sCell);
+        const gy = Math.floor((sy - offY) / sCell);
+
+        if(gx < 0 || gx >= GRID_SIZE || gy < 0 || gy >= GRID_SIZE) return;
+        if(boardState.find(p => p.x === gx && p.y === gy)) return;
+
+        // 対の検証
+        let isPairAction = false;
+        const opps = boardState.filter(p => p.player !== mySide);
+        const lastOpp = opps[opps.length - 1];
+        if(lastOpp) {
+            const dx = gx - lastOpp.x;
+            const dy = gy - lastOpp.y;
+            if((lastOpp.direction === 0 && dy === -1) || (lastOpp.direction === 1 && dx === 1) ||
+               (lastOpp.direction === 2 && dy === 1) || (lastOpp.direction === 3 && dx === -1)) isPairAction = true;
+        }
+
+        if(isPairAction && currentPairs[mySide] >= 3) {
+            alert("「対」は3連続までです！");
+            return;
+        }
+
+        const nextPairs = [...currentPairs];
+        nextPairs[mySide] = isPairAction ? nextPairs[mySide] + 1 : 0;
+
+        const piece = { x: gx, y: gy, direction: selDir, player: mySide };
+        
+        // ローカルでの仮置きはせず、サーバー経由で描画（整合性重視）
+        socket.emit('placePiece', { roomId: mySide === null ? "" : document.getElementById('room-title-display').textContent, piece, consecutivePairs: nextPairs });
+
+        if(validateWin(boardState.concat(piece), mySide)) {
+            socket.emit('declareWin', { roomId: document.getElementById('room-title-display').textContent, winner: mySide });
+        }
+    }
+
+    function validateWin(all, pIdx) {
+        const mine = all.filter(p => p.player === pIdx);
+        const vectors = [[1,0], [0,1], [1,1], [1,-1]];
+        for(let p of mine) {
+            for(let [vx, vy] of vectors) {
+                let chain = [p];
+                for(let i=1; i<5; i++) {
+                    const found = mine.find(m => m.x === p.x + vx*i && m.y === p.y + vy*i);
+                    if(found) chain.push(found); else break;
+                }
+                if(chain.length >= 5) {
+                    // 五目のなかに「対」が含まれているか
+                    for(let c1 of chain) {
+                        for(let c2 of all) {
+                            if(c1 !== c2 && checkFacing(c1, c2)) return true;
+                        }
+                    }
+                }
             }
         }
         return false;
     }
 
-    // --- Interaction Logic ---
-    function getCoord(e) {
-        const r = canvas.getBoundingClientRect();
-        const t = e.touches ? e.touches[0] : e;
-        return { x: t.clientX - r.left, y: t.clientY - r.top };
+    // --- 5. UI制御 & 感想戦 ---
+    function refreshUI() {
+        const ind = document.getElementById('turn-indicator');
+        const color = currentTurn === 0 ? "黒" : "白";
+        ind.textContent = currentTurn === mySide ? `★ あなたの番 (${color})` : `相手が考えています (${color})`;
+        ind.style.color = currentTurn === mySide ? "var(--accent)" : "#64748b";
+        document.getElementById('pair-stats').textContent = `PAIRS: B ${currentPairs[0]} / W ${currentPairs[1]}`;
     }
 
-    container.addEventListener('touchstart', e => {
-        if(e.touches.length === 1) {
-            inputState.isMoving = false;
-            const p = getCoord(e);
-            inputState.lastX = p.x; inputState.lastY = p.y;
-        } else if(e.touches.length === 2) {
-            inputState.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        }
-    }, {passive:false});
-
-    container.addEventListener('touchmove', e => {
-        e.preventDefault();
-        if(e.touches.length === 1) {
-            const p = getCoord(e);
-            const dx = p.x - inputState.lastX, dy = p.y - inputState.lastY;
-            if(Math.abs(dx) > 5 || Math.abs(dy) > 5) inputState.isMoving = true;
-            const s = 45 * view.zoom;
-            view.x -= dx / s; view.y -= dy / s;
-            inputState.lastX = p.x; inputState.lastY = p.y; render();
-        } else if(e.touches.length === 2) {
-            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            view.zoom = Math.min(Math.max(view.zoom * (d / inputState.lastDist), 0.4), 3.0);
-            inputState.lastDist = d; render();
-        }
-    }, {passive:false});
-
-    container.addEventListener('touchend', e => {
-        if(!inputState.isMoving && e.touches.length === 0) {
-            const p = getCoord(e.changedTouches[0]);
-            handleGridClick(p.x, p.y);
-        }
-    });
-
-    container.addEventListener('mousedown', e => {
-        inputState.isMoving = false; inputState.isDown = true;
-        inputState.lastX = e.clientX; inputState.lastY = e.clientY;
-    });
-    window.addEventListener('mousemove', e => {
-        if(!inputState.isDown) return;
-        const dx = e.clientX - inputState.lastX, dy = e.clientY - inputState.lastY;
-        if(Math.abs(dx) > 5 || Math.abs(dy) > 5) inputState.isMoving = true;
-        const s = 45 * view.zoom;
-        view.x -= dx / s; view.y -= dy / s;
-        inputState.lastX = e.clientX; inputState.lastY = e.clientY; render();
-    });
-    window.addEventListener('mouseup', e => {
-        if(inputState.isDown && !inputState.isMoving) {
-            const r = canvas.getBoundingClientRect();
-            handleGridClick(e.clientX - r.left, e.clientY - r.top);
-        }
-        inputState.isDown = false;
-    });
-
-    function handleGridClick(sx, sy) {
-        if(!isLive || currentTurn !== myIndex) return;
-        const s = 45 * view.zoom;
-        const gx = Math.floor((sx - (canvas.width/2 - view.x*s)) / s);
-        const gy = Math.floor((sy - (canvas.height/2 - view.y*s)) / s);
-
-        if(gx < 0 || gx >= 128 || gy < 0 || gy >= 128) return;
-        if(boardData.find(p => p.x === gx && p.y === gy)) return;
-
-        // 対の判定
-        let isPair = false;
-        const oppStones = boardData.filter(p => p.player !== myIndex);
-        const lastOpp = oppStones[oppStones.length - 1];
-        if(lastOpp) {
-            const dx = gx - lastOpp.x, dy = gy - lastOpp.y;
-            if((lastOpp.direction === 0 && dy === -1 && dx === 0) ||
-               (lastOpp.direction === 1 && dx === 1 && dy === 0) ||
-               (lastOpp.direction === 2 && dy === 1 && dx === 0) ||
-               (lastOpp.direction === 3 && dx === -1 && dy === 0)) isPair = true;
-        }
-
-        const newPairCount = isPair ? pairStats[myIndex] + 1 : 0;
-        if(isPair && newPairCount > 3) return alert("対は3回連続までです");
-
-        const piece = {x:gx, y:gy, direction:selectedDir, player:myIndex};
-        const rid = document.getElementById('ui-room-id').textContent;
-        
-        const nextPairs = [...pairStats]; nextPairs[myIndex] = newPairCount;
-        socket.emit('placePiece', { roomId: rid, piece, consecutivePairs: nextPairs });
-
-        // 勝利判定の実行
-        if(checkWinner([...boardData, piece], gx, gy, myIndex)) {
-            socket.emit('victory', { roomId: rid, winner: myIndex });
-        }
+    function updateSelDir(d) {
+        selDir = d;
+        document.querySelectorAll('.dir-button').forEach((b, i) => b.classList.toggle('active', i === d));
     }
 
-    // --- Rendering ---
-    function render() {
-        if(!canvas.width) return;
-        ctx.fillStyle = "#020617"; ctx.fillRect(0,0,canvas.width,canvas.height);
-        const s = 45 * view.zoom;
-        const ox = canvas.width/2 - view.x*s, oy = canvas.height/2 - view.y*s;
+    function initReviewMode() {
+        document.getElementById('modal-overlay').style.display = 'none';
+        document.getElementById('dir-panel').style.display = 'none';
+        document.getElementById('review-panel').style.display = 'flex';
+        isReviewing = true;
+        reviewIndex = moveHistory.length;
+        updateReviewUI();
+        draw();
+    }
 
-        // 盤面背景
-        ctx.fillStyle = varColor('--green'); ctx.fillRect(ox, oy, 128*s, 128*s);
-        
-        // グリッド線 (ズームが一定以下の時は描画をスキップして高速化)
-        if(view.zoom > 0.4) {
-            ctx.strokeStyle = "rgba(255,255,255,0.1)"; ctx.lineWidth = 1;
-            ctx.beginPath();
-            for(let i=0; i<=128; i++) {
-                ctx.moveTo(ox + i*s, oy); ctx.lineTo(ox + i*s, oy + 128*s);
-                ctx.moveTo(ox, oy + i*s); ctx.lineTo(ox + 128*s, oy + i*s);
-            }
-            ctx.stroke();
+    function reviewMove(d) {
+        reviewIndex = Math.max(0, Math.min(moveHistory.length, reviewIndex + d));
+        if(reviewIndex > 0) {
+            const last = moveHistory[reviewIndex - 1];
+            centerOn(last.x, last.y);
         }
-
-        // 石の描画
-        boardData.forEach(p => {
-            const px = ox + p.x*s + s/2, py = oy + p.y*s + s/2;
-            // 本体
-            ctx.beginPath(); ctx.arc(px, py, s*0.38, 0, Math.PI*2);
-            ctx.fillStyle = p.player === 0 ? "#000" : "#fff"; ctx.fill();
-            // ランドルト環の切れ目
-            ctx.beginPath();
-            const angle = [-Math.PI/2, 0, Math.PI/2, Math.PI][p.direction];
-            ctx.arc(px, py, s*0.38, angle - 0.4, angle + 0.4);
-            ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = s*0.12; ctx.stroke();
-        });
+        updateReviewUI();
+        draw();
     }
 
-    function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-    function updateStatusUI() {
-        const status = document.getElementById('ui-turn-status');
-        status.textContent = (currentTurn === myIndex) ? "★ あなたの番です" : "相手が考えています...";
-        status.style.color = (currentTurn === myIndex) ? "#3b82f6" : "#64748b";
-        document.getElementById('pair-info').textContent = `PAIRS: ${pairStats[0]} / ${pairStats[1]}`;
+    function updateReviewUI() {
+        document.getElementById('review-counter').textContent = `${reviewIndex} / ${moveHistory.length}`;
     }
-    function updateDir(d) {
-        selectedDir = d;
-        document.querySelectorAll('.dir-btn').forEach((btn, i) => btn.classList.toggle('active', i === d));
+
+    function resizeCanvas() {
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+        draw();
     }
-    function initResize() {
-        canvas.width = container.clientWidth; canvas.height = container.clientHeight;
-        render();
-    }
-    window.addEventListener('resize', initResize);
+
+    window.addEventListener('resize', resizeCanvas);
+    function animate() { if(isGameActive || isReviewing) { draw(); } }
 </script>
 </body>
 </html>
