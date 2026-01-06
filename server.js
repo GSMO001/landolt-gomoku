@@ -11,30 +11,26 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
 
-function sendRoomList() {
+function broadcastRooms() {
     const list = Array.from(rooms.values()).map(r => ({
         id: r.id,
         count: r.players.length,
         hasPw: r.password !== "",
-        status: r.gameStarted ? "対局中" : "募集中",
+        status: r.gameStarted ? "対局中" : "待機中",
         timeLimit: r.settings.timeLimit
     }));
     io.emit("updateRoomList", list);
 }
 
 io.on("connection", (socket) => {
-    sendRoomList();
+    broadcastRooms();
 
     socket.on("createRoom", (data) => {
-        // キー名の不一致を防止
-        const rid = data.roomId;
-        if (!rid || rooms.has(rid)) {
-            return socket.emit("error_msg", "ルーム名が無効または既に使用されています。");
-        }
+        if (!data.roomId || rooms.has(data.roomId)) return socket.emit("error_msg", "無効なルーム名です");
         const room = {
-            id: rid,
+            id: data.roomId,
             password: data.password || "",
-            settings: { timeLimit: data.timeLimit || "none" },
+            settings: { timeLimit: data.timeLimit }, // "none"含む
             players: [socket.id],
             board: [],
             turn: 0,
@@ -43,27 +39,23 @@ io.on("connection", (socket) => {
             timeLeft: data.timeLimit === "none" ? null : parseInt(data.timeLimit),
             timer: null
         };
-        rooms.set(rid, room);
-        socket.join(rid);
-        socket.emit("roomJoined", { roomId: rid, playerIndex: 0, timeLimit: room.settings.timeLimit });
-        sendRoomList();
+        rooms.set(data.roomId, room);
+        socket.join(data.roomId);
+        socket.emit("roomJoined", { roomId: data.roomId, playerIndex: 0, timeLimit: room.settings.timeLimit });
+        broadcastRooms();
     });
 
     socket.on("joinRoom", (data) => {
         const room = rooms.get(data.roomId);
         if (room && room.players.length < 2) {
-            if (room.password !== "" && room.password !== data.password) {
-                return socket.emit("error_msg", "パスワードが正しくありません。");
-            }
+            if (room.password !== "" && room.password !== data.password) return socket.emit("error_msg", "PW不一致");
             room.players.push(socket.id);
             socket.join(data.roomId);
             socket.emit("roomJoined", { roomId: data.roomId, playerIndex: 1, timeLimit: room.settings.timeLimit });
             room.gameStarted = true;
             io.to(data.roomId).emit("gameStart");
             if (room.settings.timeLimit !== "none") startTimer(data.roomId);
-            sendRoomList();
-        } else {
-            socket.emit("error_msg", "ルームが満員か、存在しません。");
+            broadcastRooms();
         }
     });
 
@@ -72,7 +64,6 @@ io.on("connection", (socket) => {
         if (!room || room.settings.timeLimit === "none") return;
         if (room.timer) clearInterval(room.timer);
         room.timeLeft = parseInt(room.settings.timeLimit);
-        
         room.timer = setInterval(() => {
             room.timeLeft--;
             io.to(roomId).emit("timerUpdate", { timeLeft: room.timeLeft });
@@ -80,7 +71,7 @@ io.on("connection", (socket) => {
                 clearInterval(room.timer);
                 io.to(roomId).emit("gameOver", { winner: 1 - room.turn, reason: "TIMEOUT" });
                 rooms.delete(roomId);
-                sendRoomList();
+                broadcastRooms();
             }
         }, 1000);
     }
@@ -101,7 +92,7 @@ io.on("connection", (socket) => {
                 if (room.timer) clearInterval(room.timer);
                 io.to(id).emit("playerLeft");
                 rooms.delete(id);
-                sendRoomList();
+                broadcastRooms();
                 break;
             }
         }
@@ -109,5 +100,3 @@ io.on("connection", (socket) => {
 });
 
 server.listen(3000);
-
-
