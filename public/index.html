@@ -3,95 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>LANDOLT GOMOKU ONLINE PRO</title>
+    <title>LANDOLT GOMOKU ONLINE</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        :root { --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --bg: #0f172a; --panel: #ffffff; }
-        * { margin:0; padding:0; box-sizing:border-box; -webkit-touch-callout:none; }
+        :root { --bg: #0f172a; --panel: #ffffff; --green: #064e3b; --accent: #2563eb; --red: #dc2626; }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); height: 100vh; overflow: hidden; display: flex; justify-content: center; }
+        .app { width: 100%; max-width: 500px; height: 100%; background: var(--panel); display: flex; flex-direction: column; position: relative; }
 
-        .container { width: 100%; max-width: 550px; height: 100%; background: var(--panel); display: flex; flex-direction: column; position: relative; }
-
-        /* ロビー：スクロール可能エリアの定義 */
+        /* LOBBY UI */
         #lobby { flex: 1; display: flex; flex-direction: column; padding: 20px; overflow: hidden; }
-        .header-title { font-size: 26px; font-weight: 800; color: #1e293b; margin-bottom: 20px; text-align: center; }
+        .create-form { background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 15px; flex-shrink: 0; }
+        input { width: 100%; padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; outline: none; }
         
-        .create-box { background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 15px; }
-        .input-group { margin-bottom: 10px; }
-        .input-group label { display: block; font-size: 12px; font-weight: bold; color: #64748b; margin-bottom: 4px; }
-        input, select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 16px; outline: none; }
-
-        .search-bar { margin-bottom: 10px; }
-        
-        .room-list-wrapper { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; background: #fff; }
+        .list-container { 
+            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; 
+            border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px;
+            background: #fff;
+        }
         .room-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-        .room-item:last-child { margin-bottom: 0; }
-        .room-item b { font-size: 16px; color: #334155; }
-        .room-item p { font-size: 12px; color: #94a3b8; }
+        .room-item b { font-size: 16px; color: #1e293b; }
 
-        /* ゲーム画面 */
-        #game { display: none; flex-direction: column; height: 100%; touch-action: none; }
-        .game-header { padding: 15px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
-        #canvas-area { flex: 1; background: #064e3b; position: relative; overflow: hidden; cursor: crosshair; }
+        /* GAME UI */
+        #game { display: none; flex-direction: column; height: 100%; touch-action: none; position: absolute; inset: 0; z-index: 10; background: #fff; }
+        .game-header { padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+        #canvas-wrap { flex: 1; background: var(--green); position: relative; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
 
-        .game-footer { padding: 20px; padding-bottom: 45px; border-top: 1px solid #e2e8f0; background: #fff; }
-        .direction-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-        .dir-btn { height: 55px; border: 2px solid #e2e8f0; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; transition: 0.2s; }
-        .dir-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
-        
-        .leave-btn { width: 100%; padding: 15px; font-size: 24px; font-weight: 800; color: var(--danger); background: none; border: none; cursor: pointer; }
-
-        /* 汎用ボタン */
-        .btn-main { background: var(--primary); color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; }
-        .btn-join { background: var(--success); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .game-footer { padding: 15px 20px 45px 20px; border-top: 1px solid #ddd; background: #fff; }
+        .dir-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }
+        .dir-btn { height: 55px; border: 2px solid #e2e8f0; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; cursor: pointer; }
+        .dir-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .leave-btn { width: 100%; padding: 10px; font-size: 20px; font-weight: bold; color: var(--red); border: none; background: none; }
     </style>
 </head>
 <body>
 
-<div class="container">
+<div class="app">
     <div id="lobby">
-        <h1 class="header-title">LANDOLT ONLINE</h1>
-        
-        <div class="create-box">
-            <div class="input-group">
-                <label>ROOM NAME</label>
-                <input type="text" id="roomId" placeholder="名前を入力してください">
-            </div>
-            <div class="input-group">
-                <label>PASSWORD (Optional)</label>
-                <input type="password" id="roomPw" placeholder="空欄でパスワードなし">
-            </div>
-            <button class="btn-main" onclick="createRoom()">新規対局を作成</button>
+        <h2 style="margin-bottom:15px; text-align:center;">LANDOLT ONLINE</h2>
+        <div class="create-form">
+            <input type="text" id="c-id" placeholder="ルーム名">
+            <input type="password" id="c-pw" placeholder="パスワード(任意)">
+            <button onclick="createRoom()" style="width:100%; padding:12px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-weight:bold;">ルームを作成</button>
         </div>
-
-        <div class="search-bar">
-            <input type="text" id="search" placeholder="🔍 ルームを検索..." oninput="updateListView()">
-        </div>
-
-        <div class="room-list-wrapper" id="list-target">
-            </div>
+        <input type="text" id="search" placeholder="🔍 ルームを検索..." oninput="renderRooms()" style="margin-bottom:10px;">
+        <div class="list-container" id="list-target"></div>
     </div>
 
     <div id="game">
         <div class="game-header">
-            <div>
-                <b id="display-room">---</b><br>
-                <small id="status-text" style="color: #64748b; font-weight: bold;">WAITING...</small>
-            </div>
-            <div id="pair-stats" style="font-weight: 800; color: #1e293b;">PAIRS: 0 / 0</div>
+            <div><b id="ui-room">---</b><br><small id="ui-status" style="font-weight:bold;">CONNECTING...</small></div>
+            <div id="ui-pairs" style="font-weight:900; color:var(--accent);">PAIRS: 0 / 0</div>
         </div>
-        
-        <div id="canvas-area"><canvas id="stage"></canvas></div>
-
+        <div id="canvas-wrap"><canvas id="stage"></canvas></div>
         <div class="game-footer">
-            <div class="direction-grid">
-                <div class="dir-btn active" id="db0" onclick="changeDir(0)">↑</div>
-                <div class="dir-btn" id="db1" onclick="changeDir(1)">→</div>
-                <div class="dir-btn" id="db2" onclick="changeDir(2)">↓</div>
-                <div class="dir-btn" id="db3" onclick="changeDir(3)">←</div>
+            <div class="dir-grid">
+                <div id="db0" class="dir-btn active" onclick="setDir(0)">↑</div>
+                <div id="db1" class="dir-btn" onclick="setDir(1)">→</div>
+                <div id="db2" class="dir-btn" onclick="setDir(2)">↓</div>
+                <div id="db3" class="dir-btn" onclick="setDir(3)">←</div>
             </div>
-            <button class="leave-btn" onclick="exitGame()">LEAVE GAME</button>
+            <button class="leave-btn" onclick="location.reload()">LEAVE GAME</button>
         </div>
     </div>
 </div>
@@ -100,239 +73,157 @@
     const socket = io();
     const cvs = document.getElementById('stage');
     const ctx = cvs.getContext('2d', { alpha: false });
-    const area = document.getElementById('canvas-area');
-    
-    let g_rooms = [], g_side = null, g_turn = 0, g_board = [], g_pairs = [0, 0], g_active = false;
-    let camera = { x: 64, y: 64, zoom: 1.0 }, selectedDir = 0;
-    let touchData = { isDrag: false, lastX: 0, lastY: 0, lastDist: 0 };
+    const wrap = document.getElementById('canvas-wrap');
 
-    // --- Lobby Functions ---
-    socket.on('updateRoomList', data => { g_rooms = data; updateListView(); });
-    
-    function updateListView() {
+    let g_rooms = [], g_side = null, g_turn = 0, g_board = [], g_pairs = [0, 0], g_active = false;
+    let cam = { x: 64, y: 64, zoom: 1.0 }, selDir = 0, touches = new Map(), isDrag = false;
+
+    // --- Lobby ---
+    socket.on('updateRoomList', list => { g_rooms = list; renderRooms(); });
+    function renderRooms() {
         const target = document.getElementById('list-target');
         const q = document.getElementById('search').value.toLowerCase();
         target.innerHTML = "";
-        
         const filtered = g_rooms.filter(r => r.id.toLowerCase().includes(q));
-        if (filtered.length === 0) {
-            target.innerHTML = `<p style="text-align:center; padding:20px; color:#94a3b8;">表示できるルームがありません</p>`;
-            return;
-        }
-
+        if(!filtered.length) { target.innerHTML = "<p style='text-align:center; padding:20px; color:#94a3b8;'>ルームがありません</p>"; return; }
         filtered.forEach(r => {
             const div = document.createElement('div');
             div.className = 'room-item';
-            div.innerHTML = `
-                <div><b>${r.id} ${r.hasPw?'🔒':''}</b><p>${r.status} (${r.playerCount}/2)</p></div>
-                <button class="btn-join" onclick="joinRoom('${r.id}', ${r.hasPw})" ${r.playerCount>=2?'disabled':''}>参加</button>
-            `;
+            div.innerHTML = `<div><b>${r.id}</b><p>${r.status} (${r.playerCount}/2)</p></div>
+                             <button onclick="joinRoom('${r.id}', ${r.hasPw})" style="padding:10px 18px; background:var(--green); color:#fff; border:none; border-radius:8px; font-weight:bold;">参加</button>`;
             target.appendChild(div);
         });
     }
-
     function createRoom() {
-        const id = document.getElementById('roomId').value;
-        const pw = document.getElementById('roomPw').value;
-        if (!id) return alert("ルーム名を入力してください");
-        socket.emit('createRoom', { roomId: id, password: pw, settings: { timeLimit: 60 } });
+        const id = document.getElementById('c-id').value;
+        const pw = document.getElementById('c-pw').value;
+        if(id) socket.emit('createRoom', { roomId: id, password: pw, settings: { timeLimit: 60 } });
+    }
+    function joinRoom(id, hp) {
+        const pw = hp ? prompt("パスワード:") : "";
+        if(pw !== null) socket.emit('joinRoom', { roomId: id, password: pw });
     }
 
-    function joinRoom(id, hasPw) {
-        const pw = hasPw ? prompt("パスワードを入力してください") : "";
-        if (pw !== null) socket.emit('joinRoom', { roomId: id, password: pw });
-    }
-
-    // --- Game Engine ---
+    // --- Game Engine Sync ---
     socket.on('roomJoined', d => {
         g_side = d.playerIndex;
-        document.getElementById('lobby').style.display = 'none';
         document.getElementById('game').style.display = 'flex';
-        document.getElementById('display-room').textContent = d.roomId;
-        initCanvas();
+        document.getElementById('ui-room').textContent = d.roomId;
+        resize();
     });
-
-    socket.on('gameStart', () => { g_active = true; syncUI(); draw(); });
-    
+    socket.on('gameStart', () => { g_active = true; uiSync(); draw(); });
     socket.on('moveMade', d => {
-        g_board.push(d.piece);
-        g_turn = d.nextTurn;
-        g_pairs = d.consecutivePairs;
-        syncUI();
-        draw();
+        g_board.push(d.piece); g_turn = d.nextTurn; g_pairs = d.consecutivePairs;
+        uiSync(); draw();
     });
-
-    socket.on('gameOver', d => {
-        g_active = false;
-        alert(d.winner === g_side ? "勝利しました！" : "敗北しました...");
-        location.reload();
-    });
-
-    socket.on('playerLeft', () => { alert("対戦相手が退出しました"); location.reload(); });
+    socket.on('gameOver', d => { alert(d.winner === g_side ? "勝利しました！" : "敗北しました..."); location.reload(); });
+    socket.on('playerLeft', () => { alert("相手が退出しました"); location.reload(); });
     socket.on('error_msg', m => alert(m));
 
-    function initCanvas() {
-        cvs.width = area.clientWidth;
-        cvs.height = area.clientHeight;
-        window.addEventListener('resize', () => {
-            cvs.width = area.clientWidth;
-            cvs.height = area.clientHeight;
-            draw();
-        });
-        draw();
-    }
-
+    // --- Render Logic ---
     function draw() {
         if (!cvs.width) return;
         ctx.fillStyle = "#020617"; ctx.fillRect(0, 0, cvs.width, cvs.height);
-        
-        const cellSize = 45 * camera.zoom;
-        const offsetX = cvs.width/2 - camera.x * cellSize;
-        const offsetY = cvs.height/2 - camera.y * cellSize;
-
-        // 盤面背景
-        ctx.fillStyle = "#064e3b";
-        ctx.fillRect(offsetX, offsetY, 128 * cellSize, 128 * cellSize);
-
-        // グリッド
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
+        const s = 45 * cam.zoom;
+        const ox = cvs.width / 2 - cam.x * s, oy = cvs.height / 2 - cam.y * s;
+        ctx.fillStyle = "#064e3b"; ctx.fillRect(ox, oy, 128 * s, 128 * s);
+        ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.beginPath();
         for (let i = 0; i <= 128; i++) {
-            ctx.moveTo(offsetX + i * cellSize, offsetY);
-            ctx.lineTo(offsetX + i * cellSize, offsetY + 128 * cellSize);
-            ctx.moveTo(offsetX, offsetY + i * cellSize);
-            ctx.lineTo(offsetX + 128 * cellSize, offsetY + i * cellSize);
+            ctx.moveTo(ox + i * s, oy); ctx.lineTo(ox + i * s, oy + 128 * s);
+            ctx.moveTo(ox, oy + i * s); ctx.lineTo(ox + 128 * s, oy + i * s);
         }
         ctx.stroke();
-
-        // 駒
         g_board.forEach(p => {
-            const centerX = offsetX + p.x * cellSize + cellSize/2;
-            const centerY = offsetY + p.y * cellSize + cellSize/2;
-            const radius = cellSize * 0.35;
-
-            // 本体
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-            ctx.strokeStyle = p.player === 0 ? "#000" : "#fff";
-            ctx.lineWidth = cellSize * 0.1;
-            ctx.stroke();
-
-            // 開口部（ランドルト環）
-            ctx.beginPath();
-            const angle = [-Math.PI/2, 0, Math.PI/2, Math.PI][p.direction];
-            ctx.arc(centerX, centerY, radius, angle - 0.4, angle + 0.4);
-            ctx.strokeStyle = "#fbbf24"; // 金色で強調
-            ctx.lineWidth = cellSize * 0.12;
-            ctx.stroke();
+            const px = ox + p.x * s + s/2, py = oy + p.y * s + s/2;
+            ctx.beginPath(); ctx.arc(px, py, s * 0.35, 0, Math.PI * 2);
+            ctx.strokeStyle = p.player === 0 ? "#000" : "#fff"; ctx.lineWidth = s * 0.1; ctx.stroke();
+            ctx.beginPath(); const a = [-Math.PI/2, 0, Math.PI/2, Math.PI][p.direction];
+            ctx.arc(px, py, s * 0.35, a - 0.4, a + 0.4); ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = s * 0.12; ctx.stroke();
         });
     }
 
-    // --- Interaction ---
-    area.addEventListener('touchstart', e => {
+    // --- Interaction (Fixed Mobile Logic) ---
+    wrap.addEventListener('touchstart', e => {
+        e.preventDefault(); 
         if (e.touches.length === 1) {
-            touchData.isDrag = false;
-            touchData.lastX = e.touches[0].clientX;
-            touchData.lastY = e.touches[0].clientY;
+            isDrag = false;
+            touches.set(e.touches[0].identifier, { x: e.touches[0].clientX, y: e.touches[0].clientY });
         } else if (e.touches.length === 2) {
-            touchData.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            wrap.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         }
     }, { passive: false });
 
-    area.addEventListener('touchmove', e => {
+    wrap.addEventListener('touchmove', e => {
         e.preventDefault();
         if (e.touches.length === 1) {
-            const dx = e.touches[0].clientX - touchData.lastX;
-            const dy = e.touches[0].clientY - touchData.lastY;
-            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) touchData.isDrag = true;
-            camera.x -= dx / (45 * camera.zoom);
-            camera.y -= dy / (45 * camera.zoom);
-            touchData.lastX = e.touches[0].clientX;
-            touchData.lastY = e.touches[0].clientY;
-            draw();
+            const t = e.touches[0];
+            const last = touches.get(t.identifier);
+            if (last) {
+                const dx = t.clientX - last.x, dy = t.clientY - last.y;
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) isDrag = true;
+                cam.x -= dx / (45 * cam.zoom); cam.y -= dy / (45 * cam.zoom);
+                touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+                draw();
+            }
         } else if (e.touches.length === 2) {
-            const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            const factor = dist / touchData.lastDist;
-            camera.zoom = Math.min(Math.max(camera.zoom * factor, 0.4), 3.0);
-            touchData.lastDist = dist;
+            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            const factor = d / wrap.lastDist;
+            cam.zoom = Math.min(Math.max(cam.zoom * factor, 0.4), 3.0);
+            wrap.lastDist = d;
             draw();
         }
     }, { passive: false });
 
-    area.addEventListener('touchend', e => {
-        if (!touchData.isDrag && e.changedTouches.length === 1) {
-            const rect = cvs.getBoundingClientRect();
-            const touchX = e.changedTouches[0].clientX - rect.left;
-            const touchY = e.changedTouches[0].clientY - rect.top;
-            handleBoardClick(touchX, touchY);
+    wrap.addEventListener('touchend', e => {
+        if (!isDrag && e.changedTouches.length === 1) {
+            const t = e.changedTouches[0];
+            const r = cvs.getBoundingClientRect();
+            onBoardClick(t.clientX - r.left, t.clientY - r.top);
         }
+        for (let t of e.changedTouches) touches.delete(t.identifier);
     });
 
-    function handleBoardClick(sx, sy) {
+    function onBoardClick(sx, sy) {
         if (!g_active || g_turn !== g_side) return;
-        
-        const cellSize = 45 * camera.zoom;
-        const gx = Math.floor((sx - (cvs.width/2 - camera.x * cellSize)) / cellSize);
-        const gy = Math.floor((sy - (cvs.height/2 - camera.y * cellSize)) / cellSize);
+        const s = 45 * cam.zoom;
+        const gx = Math.floor((sx - (cvs.width / 2 - cam.x * s)) / s);
+        const gy = Math.floor((sy - (cvs.height / 2 - cam.y * s)) / s);
+        if (gx < 0 || gx >= 128 || gy < 0 || gy >= 128 || g_board.find(p => p.x === gx && p.y === gy)) return;
 
-        if (gx < 0 || gx >= 128 || gy < 0 || gy >= 128) return;
-        if (g_board.some(p => p.x === gx && p.y === gy)) return;
-
-        // 対の判定
         let isPairMove = false;
-        const lastOppMove = g_board.filter(p => p.player !== g_side).pop();
-        if (lastOppMove) {
-            const dx = gx - lastOppMove.x;
-            const dy = gy - lastOppMove.y;
-            // 相手の開口部と自分の座標が一致するか
-            if (lastOppMove.direction === 0 && dy === -1 && dx === 0) isPairMove = true;
-            if (lastOppMove.direction === 1 && dx === 1 && dy === 0) isPairMove = true;
-            if (lastOppMove.direction === 2 && dy === 1 && dx === 0) isPairMove = true;
-            if (lastOppMove.direction === 3 && dx === -1 && dy === 0) isPairMove = true;
+        const lastOpp = g_board.filter(p => p.player !== g_side).pop();
+        if (lastOpp) {
+            const dx = gx - lastOpp.x, dy = gy - lastOpp.y;
+            if ((lastOpp.direction === 0 && dy === -1 && dx === 0) || (lastOpp.direction === 1 && dx === 1 && dy === 0) || (lastOpp.direction === 2 && dy === 1 && dx === 0) || (lastOpp.direction === 3 && dx === -1 && dy === 0)) isPairMove = true;
         }
+        if (isPairMove && g_pairs[g_side] >= 3) return alert("連続の対は3回までです");
 
-        if (isPairMove && g_pairs[g_side] >= 3) return alert("対は3回連続までです！");
-
-        const newPairCounts = [...g_pairs];
-        newPairCounts[g_side] = isPairMove ? newPairCounts[g_side] + 1 : 0;
-
-        const piece = { x: gx, y: gy, direction: selectedDir, player: g_side };
-        socket.emit('placePiece', {
-            roomId: document.getElementById('display-room').textContent,
-            piece: piece,
-            consecutivePairs: newPairCounts
-        });
-
-        if (checkVictory(g_board.concat(piece), g_side)) {
-            socket.emit('declareWin', { roomId: document.getElementById('display-room').textContent, winner: g_side });
-        }
+        const np = [...g_pairs]; np[g_side] = isPairMove ? np[g_side] + 1 : 0;
+        const piece = { x: gx, y: gy, direction: selDir, player: g_side };
+        socket.emit('placePiece', { roomId: document.getElementById('ui-room').textContent, piece, consecutivePairs: np });
+        if (winCheck(g_board.concat(piece), g_side)) socket.emit('declareWin', { roomId: document.getElementById('ui-room').textContent, winner: g_side });
     }
 
-    function checkVictory(board, side) {
-        const mine = board.filter(p => p.player === side);
-        const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
-
-        for (const p of mine) {
-            for (const [vx, vy] of directions) {
-                let chain = [p];
+    // --- Win Conditions ---
+    function winCheck(all, side) {
+        const mine = all.filter(m => m.player === side);
+        const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+        for (let m of mine) {
+            for (let [vx, vy] of dirs) {
+                let chain = [m];
                 for (let i = 1; i < 5; i++) {
-                    const found = mine.find(m => m.x === p.x + vx * i && m.y === p.y + vy * i);
-                    if (found) chain.push(found); else break;
+                    const f = mine.find(x => x.x === m.x + vx * i && x.y === m.y + vy * i);
+                    if (f) chain.push(f); else break;
                 }
                 if (chain.length >= 5) {
-                    // 五目のなかに「対」が含まれているか
-                    const hasPair = chain.some(c => board.some(other => other !== c && isPairRelation(c, other)));
-                    if (hasPair) return true;
+                    if (chain.some(c => all.some(o => o !== c && isPairRelation(c, o)))) return true;
                 }
             }
         }
         return false;
     }
-
     function isPairRelation(a, b) {
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
+        const dx = b.x - a.x, dy = b.y - a.y;
         if (dx === 0 && dy === -1) return a.direction === 0 && b.direction === 2;
         if (dx === 1 && dy === 0) return a.direction === 1 && b.direction === 3;
         if (dx === 0 && dy === 1) return a.direction === 2 && b.direction === 0;
@@ -340,20 +231,17 @@
         return false;
     }
 
-    function syncUI() {
-        const status = document.getElementById('status-text');
-        status.textContent = g_turn === g_side ? "★ あなたのターン" : "相手が考えています...";
-        status.style.color = g_turn === g_side ? "var(--primary)" : "#64748b";
-        document.getElementById('pair-stats').textContent = `PAIRS: ${g_pairs[0]} / ${g_pairs[1]}`;
+    function uiSync() {
+        const st = document.getElementById('ui-status');
+        st.textContent = g_turn === g_side ? "★ あなたの番" : "相手の番";
+        st.style.color = g_turn === g_side ? "var(--accent)" : "#666";
+        document.getElementById('ui-pairs').textContent = `PAIRS: ${g_pairs[0]} / ${g_pairs[1]}`;
     }
-
-    function changeDir(d) {
-        selectedDir = d;
-        document.querySelectorAll('.dir-btn').forEach((b, i) => b.classList.toggle('active', i === d));
-    }
-
-    function exitGame() { if (confirm("対局を終了してロビーに戻りますか？")) location.reload(); }
+    function setDir(d) { selDir = d; document.querySelectorAll('.dir-btn').forEach((b, i) => b.classList.toggle('active', i === d)); }
+    function resize() { cvs.width = wrap.clientWidth; cvs.height = wrap.clientHeight; draw(); }
+    window.onresize = resize;
 </script>
 </body>
 </html>
+
 
