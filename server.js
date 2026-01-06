@@ -13,7 +13,7 @@ const rooms = new Map();
 
 function broadcastRooms() {
     const list = Array.from(rooms.values()).map(r => ({
-        roomId: r.id, // ここをroomIdに統一
+        roomId: r.id,
         count: r.players.length,
         hasPw: r.password !== "",
         status: r.gameStarted ? "対局中" : "待機中",
@@ -25,11 +25,9 @@ function broadcastRooms() {
 io.on("connection", (socket) => {
     broadcastRooms();
 
-    // ルーム作成
     socket.on("createRoom", (data) => {
         const rid = data.roomId;
-        if (!rid || rooms.has(rid)) return socket.emit("error_msg", "無効または重複したルーム名です");
-        
+        if (!rid || rooms.has(rid)) return socket.emit("error_msg", "ルーム名が無効または重複しています");
         const room = {
             id: rid,
             password: data.password || "",
@@ -48,23 +46,19 @@ io.on("connection", (socket) => {
         broadcastRooms();
     });
 
-    // ルーム参加 (ここを重点修正)
     socket.on("joinRoom", (data) => {
         const rid = data.roomId;
         const room = rooms.get(rid);
-
-        if (!room) return socket.emit("error_msg", "ルームが見つかりません: " + rid);
-        if (room.players.length >= 2) return socket.emit("error_msg", "満員です");
-        if (room.password !== "" && room.password !== data.password) return socket.emit("error_msg", "パスワードが違います");
-
-        room.players.push(socket.id);
-        socket.join(rid);
-        socket.emit("roomJoined", { roomId: rid, playerIndex: 1, timeLimit: room.settings.timeLimit });
-        
-        room.gameStarted = true;
-        io.to(rid).emit("gameStart");
-        if (room.settings.timeLimit !== "none") startTimer(rid);
-        broadcastRooms();
+        if (room && room.players.length < 2) {
+            if (room.password !== "" && room.password !== data.password) return socket.emit("error_msg", "PW不一致");
+            room.players.push(socket.id);
+            socket.join(rid);
+            socket.emit("roomJoined", { roomId: rid, playerIndex: 1, timeLimit: room.settings.timeLimit });
+            room.gameStarted = true;
+            io.to(rid).emit("gameStart");
+            if (room.settings.timeLimit !== "none") startTimer(rid);
+            broadcastRooms();
+        }
     });
 
     function startTimer(rid) {
@@ -92,6 +86,16 @@ io.on("connection", (socket) => {
         room.turn = 1 - room.turn;
         if (room.settings.timeLimit !== "none") startTimer(data.roomId);
         io.to(data.roomId).emit("moveMade", { piece: data.piece, nextTurn: room.turn, consecutivePairs: room.pairCounts });
+    });
+
+    socket.on("victory", (data) => {
+        const room = rooms.get(data.roomId);
+        if (room) {
+            if (room.timer) clearInterval(room.timer);
+            io.to(data.roomId).emit("gameOver", { winner: data.winner, reason: "WIN" });
+            rooms.delete(data.roomId);
+            broadcastRooms();
+        }
     });
 
     socket.on("disconnect", () => {
