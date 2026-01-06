@@ -3,601 +3,268 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>LANDOLT ONLINE GOMOKU</title>
+    <title>LANDOLT ONLINE</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* === CSS DESIGN SYSTEM === */
-        :root {
-            --bg-color: #0f172a;
-            --surface-color: #ffffff;
-            --primary: #2563eb;
-            --secondary: #16a34a;
-            --danger: #ef4444;
-            --text-main: #1e293b;
-            --text-sub: #64748b;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root { --accent: #2563eb; --bg: #0f172a; --panel: #ffffff; }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: sans-serif; background: var(--bg); height: 100vh; overflow: hidden; display: flex; justify-content: center; }
         
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            overflow: hidden; /* 全体のスクロールを禁止 */
-        }
+        .app { width: 100%; max-width: 500px; height: 100%; background: var(--panel); display: flex; flex-direction: column; position: relative; }
 
-        .app-container {
-            width: 100%;
-            max-width: 500px;
-            height: 100%;
-            background-color: var(--surface-color);
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-
-        /* --- LOBBY SECTION --- */
-        #lobby-view {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            overflow: hidden;
-        }
-
-        .lobby-header { margin-bottom: 20px; text-align: center; }
-        .lobby-header h1 { font-size: 24px; font-weight: 800; color: var(--text-main); }
-
-        .create-room-panel {
-            background-color: #f1f5f9;
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            flex-shrink: 0;
-        }
+        /* LOBBY: 以前のスクロール可能な構造を強化 */
+        #lobby { flex: 1; display: flex; flex-direction: column; padding: 20px; overflow: hidden; }
+        .setup-box { background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 15px; flex-shrink: 0; }
+        input, select { width: 100%; padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 16px; }
         
-        .input-group { margin-bottom: 10px; }
-        .input-group label { display: block; font-size: 12px; font-weight: bold; color: var(--text-sub); margin-bottom: 4px; }
-        input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            font-size: 16px;
-            outline: none;
+        #room-list { 
+            flex: 1; overflow-y: scroll; -webkit-overflow-scrolling: touch; 
+            border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px;
+            background: #fff; touch-action: pan-y;
         }
-        input:focus { border-color: var(--primary); }
+        .room-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
 
-        .btn-primary {
-            width: 100%;
-            padding: 12px;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
-        }
-
-        /* ルームリストエリア（ここだけスクロール可能にする） */
-        .room-list-container {
-            flex: 1;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 10px;
-            background-color: #fff;
-            touch-action: pan-y; /* スクロールのみ許可 */
-        }
-
-        .room-card {
-            background-color: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .room-info b { font-size: 16px; color: var(--text-main); display: block; }
-        .room-info span { font-size: 12px; color: var(--text-sub); }
-
-        .btn-join {
-            background-color: var(--secondary);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        /* --- GAME SECTION --- */
-        #game-view {
-            display: none; /* 初期は非表示 */
-            flex-direction: column;
-            height: 100%;
-            touch-action: none; /* ブラウザのスクロールを完全に禁止 */
-        }
-
-        .game-nav {
-            padding: 10px 15px;
-            border-bottom: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #fff;
-        }
-        .game-nav b { font-size: 18px; color: var(--text-main); }
-        .game-nav #status-badge { font-size: 12px; font-weight: bold; padding: 4px 8px; border-radius: 4px; background: #e2e8f0; }
-
-        #canvas-container {
-            flex: 1;
-            background-color: #064e3b;
-            position: relative;
-            overflow: hidden;
-        }
+        /* GAME: 駒が置けるようにイベントエリアを確保 */
+        #game { display: none; flex-direction: column; height: 100%; touch-action: none; position: absolute; inset: 0; z-index: 100; background: #fff; }
+        .game-header { padding: 10px 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        
+        #canvas-area { flex: 1; background: #064e3b; position: relative; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
 
-        .game-controls {
-            padding: 20px;
-            padding-bottom: 45px; /* iOSのセーフエリア対応 */
-            background-color: #fff;
-            border-top: 1px solid #e2e8f0;
-        }
+        .game-footer { padding: 15px 20px 40px 20px; border-top: 1px solid #eee; background: #fff; }
+        .timer-bar { height: 6px; background: #eee; border-radius: 3px; margin-bottom: 15px; overflow: hidden; }
+        #timer-fill { height: 100%; background: var(--accent); width: 100%; transition: width 1s linear; }
 
-        .direction-selector {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .dir-btn {
-            height: 60px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .dir-btn.active {
-            background-color: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            transform: scale(0.95);
-        }
-
-        .exit-btn {
-            width: 100%;
-            padding: 10px;
-            font-size: 22px;
-            font-weight: 800;
-            color: var(--danger);
-            border: none;
-            background: none;
-            cursor: pointer;
-        }
-
-        /* 補助表示 */
-        #pair-counter {
-            text-align: center;
-            font-weight: 900;
-            color: var(--primary);
-            margin-bottom: 10px;
-        }
+        .dir-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }
+        .dir-btn { height: 50px; border: 2px solid #ddd; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; }
+        .dir-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
     </style>
 </head>
 <body>
 
-<div class="app-container">
-    <div id="lobby-view">
-        <div class="lobby-header">
-            <h1>LANDOLT ONLINE</h1>
+<div class="app">
+    <div id="lobby">
+        <h2 style="margin-bottom:15px; text-align:center;">LANDOLT ONLINE</h2>
+        <div class="setup-box">
+            <input type="text" id="rid" placeholder="ルーム名">
+            <input type="password" id="rpw" placeholder="パスワード(任意)">
+            <label style="font-size:12px; color:#666;">制限時間(秒):</label>
+            <select id="rtime">
+                <option value="30">30秒</option>
+                <option value="60" selected>60秒</option>
+                <option value="120">120秒</option>
+            </select>
+            <button onclick="createRoom()" style="width:100%; padding:12px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-weight:bold;">ルーム作成</button>
         </div>
-
-        <div class="create-room-panel">
-            <div class="input-group">
-                <label>ROOM NAME</label>
-                <input type="text" id="input-room-id" placeholder="ルーム名を入力">
-            </div>
-            <div class="input-group">
-                <label>PASSWORD (Optional)</label>
-                <input type="password" id="input-room-pw" placeholder="空欄ならパスワードなし">
-            </div>
-            <button class="btn-primary" onclick="handleCreateRoom()">新しく対局を作る</button>
-        </div>
-
-        <div style="margin-bottom: 10px;">
-            <input type="text" id="search-input" placeholder="🔍 ルームを検索..." oninput="refreshRoomListUI()">
-        </div>
-
-        <div class="room-list-container" id="room-list-target">
-            </div>
+        <div id="room-list"></div>
     </div>
 
-    <div id="game-view">
-        <div class="game-nav">
-            <div>
-                <b id="display-room-name">---</b><br>
-                <span id="display-turn-info">接続中...</span>
-            </div>
-            <div id="status-badge">WAITING</div>
+    <div id="game">
+        <div class="game-header">
+            <div><b id="room-name-ui">---</b><br><small id="turn-label">WAITING...</small></div>
+            <div id="timer-text" style="font-weight:bold; font-size:20px; color:var(--accent);">60s</div>
         </div>
-
-        <div id="pair-counter">PAIRS: 0 / 0</div>
-
-        <div id="canvas-container">
-            <canvas id="game-canvas"></canvas>
-        </div>
-
-        <div class="game-controls">
-            <div class="direction-selector">
-                <div class="dir-btn active" id="dir-0" onclick="changeDirection(0)">↑</div>
-                <div class="dir-btn" id="dir-1" onclick="changeDirection(1)">→</div>
-                <div class="dir-btn" id="dir-2" onclick="changeDirection(2)">↓</div>
-                <div class="dir-btn" id="dir-3" onclick="changeDirection(3)">←</div>
+        <div class="timer-bar"><div id="timer-fill"></div></div>
+        <div id="canvas-area"><canvas id="stage"></canvas></div>
+        <div class="game-footer">
+            <div id="pair-ui" style="text-align:center; font-weight:bold; margin-bottom:10px; color:var(--accent);">PAIRS: 0 / 0</div>
+            <div class="dir-grid">
+                <div id="d0" class="dir-btn active" onclick="setDir(0)">↑</div>
+                <div id="d1" class="dir-btn" onclick="setDir(1)">→</div>
+                <div id="d2" class="dir-btn" onclick="setDir(2)">↓</div>
+                <div id="d3" class="dir-btn" onclick="setDir(3)">←</div>
             </div>
-            <button class="exit-btn" onclick="confirmExit()">LEAVE GAME</button>
+            <button onclick="location.reload()" style="width:100%; color:red; border:none; background:none; font-weight:bold;">LEAVE GAME</button>
         </div>
     </div>
 </div>
 
 <script>
-    // === GAME LOGIC / SOCKET COMMUNICATION ===
     const socket = io();
-    const canvas = document.getElementById('game-canvas');
-    const ctx = canvas.getContext('2d', { alpha: false });
-    const canvasContainer = document.getElementById('canvas-container');
+    const cvs = document.getElementById('stage');
+    const ctx = cvs.getContext('2d', { alpha: false });
+    const area = document.getElementById('canvas-area');
 
-    // グローバル状態
-    let currentRooms = [];
-    let playerIndex = null; // 0 or 1
-    let myTurn = false;
-    let gameState = {
-        roomId: "",
-        board: [],
-        turn: 0,
-        gameStarted: false,
-        pairCounts: [0, 0] // 連続の「対」回数
-    };
+    let g_rooms = [], g_side = null, g_turn = 0, g_board = [], g_pairs = [0, 0], g_active = false;
+    let cam = { x: 64, y: 64, zoom: 1.0 }, selDir = 0, g_timeLimit = 60;
+    let touchData = { isMove: false, lastX: 0, lastY: 0, lastDist: 0 };
 
-    // カメラ・操作状態
-    let camera = { x: 64, y: 64, zoom: 1.0 };
-    let selectedDir = 0;
-    let isDragging = false;
-    let lastTouchPos = { x: 0, y: 0 };
-    let lastPinchDist = 0;
-    let activeTouches = new Map();
-
-    // --- Lobby Functions ---
-    socket.on('updateRoomList', (list) => {
-        currentRooms = list;
-        refreshRoomListUI();
-    });
-
-    function refreshRoomListUI() {
-        const target = document.getElementById('room-list-target');
-        const searchWord = document.getElementById('search-input').value.toLowerCase();
-        target.innerHTML = "";
-
-        const filtered = currentRooms.filter(r => r.id.toLowerCase().includes(searchWord));
-
-        if (filtered.length === 0) {
-            target.innerHTML = `<p style="text-align:center; padding:20px; color:#94a3b8;">ルームが見つかりません</p>`;
-            return;
-        }
-
-        filtered.forEach(room => {
-            const card = document.createElement('div');
-            card.className = 'room-card';
-            card.innerHTML = `
-                <div class="room-info">
-                    <b>${room.id} ${room.hasPw ? '🔒' : ''}</b>
-                    <span>${room.status} (${room.playerCount}/2)</span>
-                </div>
-                <button class="btn-join" onclick="handleJoinRoom('${room.id}', ${room.hasPw})" ${room.playerCount >= 2 ? 'disabled' : ''}>
-                    ${room.playerCount >= 2 ? '満員' : '参加'}
-                </button>
-            `;
-            target.appendChild(card);
+    // --- Lobby ---
+    socket.on('updateRoomList', list => {
+        const target = document.getElementById('room-list');
+        target.innerHTML = list.length ? "" : "<p style='text-align:center;color:#999;padding:20px;'>ルームがありません</p>";
+        list.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'room-item';
+            div.innerHTML = `<div><b>${r.id}</b><br><small>${r.status} (${r.playerCount}/2)</small></div>
+                             <button onclick="joinRoom('${r.id}', ${r.hasPw})" style="padding:8px 15px; background:#16a34a; color:#fff; border:none; border-radius:6px;">参加</button>`;
+            target.appendChild(div);
         });
-    }
-
-    function handleCreateRoom() {
-        const roomId = document.getElementById('input-room-id').value;
-        const password = document.getElementById('input-room-pw').value;
-        if (!roomId) return alert("ルーム名を入力してください");
-        socket.emit('createRoom', { roomId, password, settings: { timeLimit: 60 } });
-    }
-
-    function handleJoinRoom(id, hasPw) {
-        const password = hasPw ? prompt("パスワードを入力してください") : "";
-        if (password !== null) socket.emit('joinRoom', { roomId: id, password });
-    }
-
-    // --- Socket Game Events ---
-    socket.on('roomJoined', (data) => {
-        playerIndex = data.playerIndex;
-        gameState.roomId = data.roomId;
-        document.getElementById('lobby-view').style.display = 'none';
-        document.getElementById('game-view').style.display = 'flex';
-        document.getElementById('display-room-name').textContent = data.roomId;
-        resizeCanvas();
     });
 
-    socket.on('gameStart', () => {
-        gameState.gameStarted = true;
-        updateUI();
-        render();
+    function createRoom() {
+        const id = document.getElementById('rid').value;
+        const pw = document.getElementById('rpw').value;
+        const time = document.getElementById('rtime').value;
+        if(id) socket.emit('createRoom', { roomId: id, password: pw, timeLimit: time });
+    }
+
+    function joinRoom(id, hasPw) {
+        const pw = hasPw ? prompt("PW:") : "";
+        if(pw !== null) socket.emit('joinRoom', { roomId: id, password: pw });
+    }
+
+    // --- Game Logic ---
+    socket.on('roomJoined', d => {
+        g_side = d.playerIndex;
+        g_timeLimit = d.timeLimit;
+        document.getElementById('game').style.display = 'flex';
+        document.getElementById('room-name-ui').textContent = d.roomId;
+        resize();
     });
 
-    socket.on('moveMade', (data) => {
-        gameState.board.push(data.piece);
-        gameState.turn = data.nextTurn;
-        gameState.pairCounts = data.consecutivePairs;
-        updateUI();
-        render();
+    socket.on('gameStart', () => { g_active = true; updateUI(); draw(); });
+
+    socket.on('timerUpdate', d => {
+        document.getElementById('timer-text').textContent = d.timeLeft + "s";
+        document.getElementById('timer-fill').style.width = (d.timeLeft / g_timeLimit * 100) + "%";
+        document.getElementById('timer-fill').style.background = d.timeLeft < 10 ? "red" : "var(--accent)";
     });
 
-    socket.on('gameOver', (data) => {
-        gameState.gameStarted = false;
-        alert(data.winner === playerIndex ? "あなたの勝利です！" : "敗北しました...");
+    socket.on('moveMade', d => {
+        g_board.push(d.piece); g_turn = d.nextTurn; g_pairs = d.consecutivePairs;
+        updateUI(); draw();
+    });
+
+    socket.on('gameOver', d => {
+        alert(d.reason === "TIMEOUT" ? "時間切れ！ " + (d.winner === g_side ? "勝利" : "敗北") : (d.winner === g_side ? "勝利！" : "敗北..."));
         location.reload();
     });
 
-    socket.on('playerLeft', () => {
-        alert("対戦相手が退出しました。");
-        location.reload();
-    });
+    socket.on('error_msg', m => alert(m));
 
-    socket.on('error_msg', (msg) => alert(msg));
-
-    // --- Rendering Engine ---
-    function render() {
-        if (!canvas.width) return;
-        
-        // 背景クリア
-        ctx.fillStyle = "#020617";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        const cellSize = 45 * camera.zoom;
-        const offsetX = canvas.width / 2 - camera.x * cellSize;
-        const offsetY = canvas.height / 2 - camera.y * cellSize;
-
-        // 盤面描画（128x128）
-        ctx.fillStyle = "#064e3b";
-        ctx.fillRect(offsetX, offsetY, 128 * cellSize, 128 * cellSize);
-
-        // グリッド線
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        // 描画負荷軽減のため、画面内のみ描画する工夫も可能だが今回は全描画
-        for (let i = 0; i <= 128; i++) {
-            ctx.moveTo(offsetX + i * cellSize, offsetY);
-            ctx.lineTo(offsetX + i * cellSize, offsetY + 128 * cellSize);
-            ctx.moveTo(offsetX, offsetY + i * cellSize);
-            ctx.lineTo(offsetX + 128 * cellSize, offsetY + i * cellSize);
+    // --- Drawing ---
+    function draw() {
+        if(!cvs.width) return;
+        ctx.fillStyle = "#020617"; ctx.fillRect(0, 0, cvs.width, cvs.height);
+        const s = 45 * cam.zoom;
+        const ox = cvs.width/2 - cam.x * s, oy = cvs.height/2 - cam.y * s;
+        ctx.fillStyle = "#064e3b"; ctx.fillRect(ox, oy, 128*s, 128*s);
+        ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.beginPath();
+        for(let i=0; i<=128; i++) {
+            ctx.moveTo(ox+i*s, oy); ctx.lineTo(ox+i*s, oy+128*s);
+            ctx.moveTo(ox, oy+i*s); ctx.lineTo(ox+128*s, oy+i*s);
         }
         ctx.stroke();
-
-        // 駒（ランドルト環）の描画
-        gameState.board.forEach(piece => {
-            const centerX = offsetX + piece.x * cellSize + cellSize / 2;
-            const centerY = offsetY + piece.y * cellSize + cellSize / 2;
-            const radius = cellSize * 0.35;
-
-            // 円本体
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-            ctx.strokeStyle = (piece.player === 0) ? "#000000" : "#ffffff";
-            ctx.lineWidth = cellSize * 0.1;
-            ctx.stroke();
-
-            // 切れ目（ランドルト環の特徴）
-            ctx.beginPath();
-            const startAngle = [-Math.PI/2, 0, Math.PI/2, Math.PI][piece.direction];
-            ctx.arc(centerX, centerY, radius, startAngle - 0.4, startAngle + 0.4);
-            ctx.strokeStyle = "#fbbf24"; // 切れ目を目立たせる色
-            ctx.lineWidth = cellSize * 0.13;
-            ctx.stroke();
+        g_board.forEach(p => {
+            const px = ox + p.x*s + s/2, py = oy + p.y*s + s/2;
+            ctx.beginPath(); ctx.arc(px, py, s*0.35, 0, Math.PI*2);
+            ctx.strokeStyle = p.player === 0 ? "#000" : "#fff"; ctx.lineWidth = s*0.1; ctx.stroke();
+            ctx.beginPath(); const a = [-Math.PI/2, 0, Math.PI/2, Math.PI][p.direction];
+            ctx.arc(px, py, s*0.35, a-0.4, a+0.4); ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = s*0.12; ctx.stroke();
         });
     }
 
-    // --- Interaction Logic (The Most Critical Part) ---
-    canvasContainer.addEventListener('touchstart', (e) => {
+    // --- Interaction (安定版) ---
+    area.addEventListener('touchstart', e => {
         e.preventDefault();
-        if (e.touches.length === 1) {
-            isDragging = false;
-            lastTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            activeTouches.set(e.touches[0].identifier, lastTouchPos);
-        } else if (e.touches.length === 2) {
-            lastPinchDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
+        if(e.touches.length === 1) {
+            touchData.isMove = false;
+            touchData.lastX = e.touches[0].clientX;
+            touchData.lastY = e.touches[0].clientY;
+        } else if(e.touches.length === 2) {
+            touchData.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         }
-    }, { passive: false });
+    }, {passive:false});
 
-    canvasContainer.addEventListener('touchmove', (e) => {
+    area.addEventListener('touchmove', e => {
         e.preventDefault();
-        if (e.touches.length === 1) {
-            const currentPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            const dx = currentPos.x - lastTouchPos.x;
-            const dy = currentPos.y - lastTouchPos.y;
-
-            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) isDragging = true;
-
-            // カメラ移動
-            camera.x -= dx / (45 * camera.zoom);
-            camera.y -= dy / (45 * camera.zoom);
-
-            lastTouchPos = currentPos;
-            render();
-        } else if (e.touches.length === 2) {
-            const dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-            const zoomFactor = dist / lastPinchDist;
-            camera.zoom = Math.min(Math.max(camera.zoom * zoomFactor, 0.4), 3.0);
-            lastPinchDist = dist;
-            render();
+        if(e.touches.length === 1) {
+            const dx = e.touches[0].clientX - touchData.lastX;
+            const dy = e.touches[0].clientY - touchData.lastY;
+            if(Math.abs(dx) > 3 || Math.abs(dy) > 3) touchData.isMove = true;
+            cam.x -= dx / (45 * cam.zoom); cam.y -= dy / (45 * cam.zoom);
+            touchData.lastX = e.touches[0].clientX; touchData.lastY = e.touches[0].clientY;
+            draw();
+        } else if(e.touches.length === 2) {
+            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            cam.zoom = Math.min(Math.max(cam.zoom * (d / touchData.lastDist), 0.4), 3.0);
+            touchData.lastDist = d;
+            draw();
         }
-    }, { passive: false });
+    }, {passive:false});
 
-    canvasContainer.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        if (!isDragging && e.changedTouches.length === 1 && e.touches.length === 0) {
-            const rect = canvas.getBoundingClientRect();
-            const touchX = e.changedTouches[0].clientX - rect.left;
-            const touchY = e.changedTouches[0].clientY - rect.top;
-            processBoardClick(touchX, touchY);
+    area.addEventListener('touchend', e => {
+        if(!touchData.isMove && e.changedTouches.length === 1) {
+            const r = cvs.getBoundingClientRect();
+            placeAt(e.changedTouches[0].clientX - r.left, e.changedTouches[0].clientY - r.top);
         }
-        for (let t of e.changedTouches) activeTouches.delete(t.identifier);
-    }, { passive: false });
+    });
 
-    /**
-     * 画面タップを盤面座標に変換して石を置く
-     */
-    function processBoardClick(screenX, screenY) {
-        if (!gameState.gameStarted || gameState.turn !== playerIndex) return;
-
-        const cellSize = 45 * camera.zoom;
-        const gridX = Math.floor((screenX - (canvas.width / 2 - camera.x * cellSize)) / cellSize);
-        const gridY = Math.floor((screenY - (canvas.height / 2 - camera.y * cellSize)) / cellSize);
-
-        // 範囲外または既に石がある
-        if (gridX < 0 || gridX >= 128 || gridY < 0 || gridY >= 128) return;
-        if (gameState.board.some(p => p.x === gridX && p.y === gridY)) return;
-
-        // 「対」の判定ロジック
-        let isPairMove = false;
-        const lastOpponentPiece = gameState.board.filter(p => p.player !== playerIndex).pop();
+    function placeAt(sx, sy) {
+        if(!g_active || g_turn !== g_side) return;
+        const s = 45 * cam.zoom;
+        const gx = Math.floor((sx - (cvs.width/2 - cam.x*s)) / s);
+        const gy = Math.floor((sy - (cvs.height/2 - cam.y*s)) / s);
         
-        if (lastOpponentPiece) {
-            const dx = gridX - lastOpponentPiece.x;
-            const dy = gridY - lastOpponentPiece.y;
-            // 相手の切れ目の方向に自分が置いたか
-            if (lastOpponentPiece.direction === 0 && dy === -1 && dx === 0) isPairMove = true;
-            if (lastOpponentPiece.direction === 1 && dx === 1 && dy === 0) isPairMove = true;
-            if (lastOpponentPiece.direction === 2 && dy === 1 && dx === 0) isPairMove = true;
-            if (lastOpponentPiece.direction === 3 && dx === -1 && dy === 0) isPairMove = true;
+        if(gx<0 || gx>=128 || gy<0 || gy>=128 || g_board.find(p=>p.x===gx && p.y===gy)) return;
+
+        let isP = false;
+        const last = g_board.filter(p=>p.player !== g_side).pop();
+        if(last) {
+            const dx = gx-last.x, dy = gy-last.y;
+            if((last.direction===0 && dy===-1) || (last.direction===1 && dx===1) || (last.direction===2 && dy===1) || (last.direction===3 && dx===-1)) isP = true;
         }
+        if(isP && g_pairs[g_side] >= 3) return alert("対は3回まで");
 
-        // 3連続制限チェック
-        if (isPairMove && gameState.pairCounts[playerIndex] >= 3) {
-            return alert("連続して「対」にできるのは3回までです！");
-        }
-
-        const newPairCounts = [...gameState.pairCounts];
-        newPairCounts[playerIndex] = isPairMove ? newPairCounts[playerIndex] + 1 : 0;
-
-        const piece = { x: gridX, y: gridY, direction: selectedDir, player: playerIndex };
-
-        // サーバーに送信
-        socket.emit('placePiece', {
-            roomId: gameState.roomId,
-            piece: piece,
-            consecutivePairs: newPairCounts
-        });
-
-        // 勝利判定
-        if (checkWinCondition(gameState.board.concat(piece), playerIndex)) {
-            socket.emit('declareWin', { roomId: gameState.roomId, winner: playerIndex });
+        const np = [...g_pairs]; np[g_side] = isP ? np[g_side]+1 : 0;
+        const piece = { x:gx, y:gy, direction:selDir, player:g_side };
+        socket.emit('placePiece', { roomId: document.getElementById('room-name-ui').textContent, piece, consecutivePairs: np });
+        
+        if(checkWin(g_board.concat(piece), g_side)) {
+            socket.emit('declareWin', { roomId: document.getElementById('room-name-ui').textContent, winner: g_side });
         }
     }
 
-    /**
-     * 勝利条件: 5つ並んでいる ＋ その中に最低1つの「対」関係が含まれている
-     */
-    function checkWinCondition(board, side) {
-        const myPieces = board.filter(p => p.player === side);
-        const vectors = [[1, 0], [0, 1], [1, 1], [1, -1]];
-
-        for (const p of myPieces) {
-            for (const [vx, vy] of vectors) {
-                let line = [p];
-                // 5つ並びをチェック
-                for (let i = 1; i < 5; i++) {
-                    const found = myPieces.find(m => m.x === p.x + vx * i && m.y === p.y + vy * i);
-                    if (found) line.push(found); else break;
+    function checkWin(all, side) {
+        const mine = all.filter(m => m.player === side);
+        const ds = [[1,0],[0,1],[1,1],[1,-1]];
+        for(let m of mine) {
+            for(let [vx, vy] of ds) {
+                let chain = [m];
+                for(let i=1; i<5; i++) {
+                    const f = mine.find(x => x.x === m.x+vx*i && x.y === m.y+vy*i);
+                    if(f) chain.push(f); else break;
                 }
-
-                if (line.length >= 5) {
-                    // その5つの中に、盤面上の誰かと「対」になっている石が1つでもあるか？
-                    const hasValidPair = line.some(stone => {
-                        return board.some(other => {
-                            if (other === stone) return false;
-                            return isPairRelation(stone, other);
-                        });
-                    });
-                    if (hasValidPair) return true;
+                if(chain.length >= 5) {
+                    if(chain.some(c => all.some(o => o!==c && isPair(c, o)))) return true;
                 }
             }
         }
         return false;
     }
-
-    function isPairRelation(a, b) {
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        if (dx === 0 && dy === -1) return a.direction === 0 && b.direction === 2;
-        if (dx === 1 && dy === 0) return a.direction === 1 && b.direction === 3;
-        if (dx === 0 && dy === 1) return a.direction === 2 && b.direction === 0;
-        if (dx === -1 && dy === 0) return a.direction === 3 && b.direction === 1;
+    function isPair(a, b) {
+        const dx=b.x-a.x, dy=b.y-a.y;
+        if(dx===0 && dy===-1) return a.direction===0 && b.direction===2;
+        if(dx===1 && dy===0) return a.direction===1 && b.direction===3;
+        if(dx===0 && dy===1) return a.direction===2 && b.direction===0;
+        if(dx===-1 && dy===0) return a.direction===3 && b.direction===1;
         return false;
     }
 
-    // --- UI Helpers ---
     function updateUI() {
-        const badge = document.getElementById('status-badge');
-        const info = document.getElementById('display-turn-info');
-        
-        if (gameState.turn === playerIndex) {
-            badge.textContent = "YOUR TURN";
-            badge.style.background = "var(--primary)";
-            badge.style.color = "white";
-            info.textContent = "あなたの番です。石を置いてください。";
-        } else {
-            badge.textContent = "WAITING";
-            badge.style.background = "#e2e8f0";
-            badge.style.color = "var(--text-sub)";
-            info.textContent = "相手が考えています...";
-        }
-
-        document.getElementById('pair-counter').textContent = `PAIRS: ${gameState.pairCounts[0]} / ${gameState.pairCounts[1]}`;
+        const l = document.getElementById('turn-label');
+        l.textContent = g_turn === g_side ? "★ あなたのターン" : "相手が考え中...";
+        l.style.color = g_turn === g_side ? "var(--accent)" : "#999";
+        document.getElementById('pair-ui').textContent = `PAIRS: ${g_pairs[0]} / ${g_pairs[1]}`;
     }
-
-    function changeDirection(d) {
-        selectedDir = d;
-        document.querySelectorAll('.dir-btn').forEach((btn, i) => {
-            btn.classList.toggle('active', i === d);
-        });
-    }
-
-    function resizeCanvas() {
-        canvas.width = canvasContainer.clientWidth;
-        canvas.height = canvasContainer.clientHeight;
-        render();
-    }
-
-    function confirmExit() {
-        if (confirm("対局を終了してロビーに戻りますか？")) location.reload();
-    }
-
-    window.addEventListener('resize', resizeCanvas);
+    function setDir(d) { selDir = d; document.querySelectorAll('.dir-btn').forEach((b,i)=>b.classList.toggle('active', i===d)); }
+    function resize() { cvs.width=area.clientWidth; cvs.height=area.clientHeight; draw(); }
+    window.onresize = resize;
 </script>
 </body>
 </html>
+
 
 
 
