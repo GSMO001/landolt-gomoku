@@ -10,53 +10,44 @@
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
         body { font-family:sans-serif; background:var(--slate); height:100vh; overflow:hidden; display:flex; justify-content:center; }
         .app { width:100%; max-width:500px; background:#fff; height:100%; display:flex; flex-direction:column; position:relative; }
-
-        /* ロビー: 確実なスクロール */
         #lobby { flex:1; display:flex; flex-direction:column; padding:15px; overflow:hidden; }
-        .setup { background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:15px; flex-shrink:0; }
+        .setup { background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:15px; }
         input, select { width:100%; padding:12px; margin-bottom:10px; border-radius:8px; border:1px solid #ccc; font-size:16px; }
         .btn-create { width:100%; padding:12px; background:var(--blue); color:#fff; border:none; border-radius:8px; font-weight:bold; cursor:pointer; }
-        
         #room-list { flex:1; overflow-y:auto; border:1px solid #ddd; border-radius:8px; background:#fff; }
         .room-card { padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center; }
-
-        /* ゲーム画面 */
         #game { display:none; flex-direction:column; height:100%; position:absolute; inset:0; background:#fff; z-index:100; }
         #canvas-wrap { flex:1; background:#064e3b; position:relative; overflow:hidden; touch-action:none; }
         canvas { display:block; width:100%; height:100%; }
-
         .footer { padding:10px 20px 30px; border-top:1px solid #eee; }
-        .timer-bg { height:6px; background:#eee; margin-bottom:10px; border-radius:3px; overflow:hidden; }
-        #timer-bar { height:100%; background:var(--blue); width:100%; transition:width 1s linear; }
-
-        .dir-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px; }
+        .timer-bg { height:6px; background:#eee; border-radius:3px; overflow:hidden; }
+        #timer-bar { height:100%; background:var(--blue); width:100%; }
+        .dir-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:10px 0; }
         .dir-btn { height:45px; border:2px solid #ddd; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; }
         .dir-btn.active { background:var(--blue); color:#fff; border-color:var(--blue); }
     </style>
 </head>
 <body>
-
 <div class="app">
     <div id="lobby">
         <h2 style="text-align:center;margin-bottom:10px;">LANDOLT ONLINE</h2>
         <div class="setup">
-            <input type="text" id="r_id" placeholder="ルーム名">
-            <input type="password" id="r_pw" placeholder="パスワード(任意)">
-            <select id="r_time">
+            <input type="text" id="in_id" placeholder="ルーム名を入力">
+            <input type="password" id="in_pw" placeholder="パスワード(任意)">
+            <select id="in_time">
                 <option value="none">時間無制限</option>
                 <option value="30">30秒</option>
                 <option value="60" selected>60秒</option>
                 <option value="120">120秒</option>
             </select>
-            <button class="btn-create" onclick="doCreate()">ルームを作成</button>
+            <button class="btn-create" onclick="reqCreate()">ルームを作成</button>
         </div>
         <div id="room-list"></div>
     </div>
-
     <div id="game">
         <div style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
             <div><b id="ui_id">--</b><br><small id="ui_status">待機中</small></div>
-            <div id="ui_time" style="font-weight:bold;">--</div>
+            <div id="ui_time" style="font-weight:bold;">∞</div>
         </div>
         <div class="timer-bg"><div id="timer-bar"></div></div>
         <div id="canvas-wrap"><canvas id="stage"></canvas></div>
@@ -68,45 +59,41 @@
                 <div id="d2" class="dir-btn" onclick="setDir(2)">↓</div>
                 <div id="d3" class="dir-btn" onclick="setDir(3)">←</div>
             </div>
-            <button onclick="location.reload()" style="width:100%;border:none;background:none;color:red;font-size:12px;">退室する</button>
+            <button onclick="location.reload()" style="width:100%;border:none;background:none;color:red;font-size:12px;cursor:pointer;">退室する</button>
         </div>
     </div>
 </div>
-
 <script>
     const socket = io();
     const cvs = document.getElementById('stage'), ctx = cvs.getContext('2d', {alpha:false});
     const wrap = document.getElementById('canvas-wrap');
-
-    let g_side = null, g_turn = 0, g_board = [], g_pairs = [0,0], g_active = false, g_limit = "60";
+    let g_side = null, g_turn = 0, g_board = [], g_pairs = [0,0], g_active = false, g_limit = "none";
     let cam = {x:64, y:64, zoom:1.0}, selDir = 0, touch = {isMove:false, lx:0, ly:0, ld:0, down:false};
 
-    // --- Lobby Logic ---
     socket.on('updateRoomList', list => {
         const target = document.getElementById('room-list');
-        target.innerHTML = list.length ? "" : "<p style='text-align:center;padding:20px;color:#999;'>募集中ルームなし</p>";
+        target.innerHTML = list.length ? "" : "<p style='text-align:center;padding:20px;color:#999;'>募集中なし</p>";
         list.forEach(r => {
             const div = document.createElement('div');
             div.className = 'room-card';
-            div.innerHTML = `<div><b>${r.id}</b><br><small>${r.status} (${r.count}/2)</small></div>
-                             <button onclick="doJoin('${r.id}', ${r.hasPw})" style="padding:8px 12px; background:#16a34a; color:#fff; border:none; border-radius:6px;">参加</button>`;
+            div.innerHTML = `<div><b>${r.roomId}</b><br><small>${r.status} (${r.count}/2)</small></div>
+                             <button onclick="reqJoin('${r.roomId}', ${r.hasPw})" style="padding:8px 12px; background:#16a34a; color:#fff; border:none; border-radius:6px; cursor:pointer;">参加</button>`;
             target.appendChild(div);
         });
     });
 
-    function doCreate() {
-        const id = document.getElementById('r_id').value;
-        const pw = document.getElementById('r_pw').value;
-        const tm = document.getElementById('r_time').value;
+    function reqCreate() {
+        const id = document.getElementById('in_id').value;
+        const pw = document.getElementById('in_pw').value;
+        const tm = document.getElementById('in_time').value;
         if(id) socket.emit('createRoom', { roomId: id, password: pw, timeLimit: tm });
     }
 
-    function doJoin(id, hp) {
-        const pw = hp ? prompt("PW:") : "";
+    function reqJoin(id, hp) {
+        const pw = hp ? prompt("パスワード:") : "";
         if(pw !== null) socket.emit('joinRoom', { roomId: id, password: pw });
     }
 
-    // --- Game Logic ---
     socket.on('roomJoined', d => {
         g_side = d.playerIndex; g_limit = d.timeLimit;
         document.getElementById('lobby').style.display = 'none';
@@ -115,29 +102,23 @@
         resize();
     });
 
-    socket.on('gameStart', () => { g_active = true; refresh(); draw(); });
+    socket.on('gameStart', () => { g_active = true; update(); draw(); });
     socket.on('timerUpdate', d => {
         if(g_limit === "none") return;
         document.getElementById('ui_time').textContent = d.timeLeft + "s";
         document.getElementById('timer-bar').style.width = (d.timeLeft / parseInt(g_limit) * 100) + "%";
     });
-
-    socket.on('moveMade', d => {
-        g_board.push(d.piece); g_turn = d.nextTurn; g_pairs = d.consecutivePairs;
-        refresh(); draw();
-    });
-
+    socket.on('moveMade', d => { g_board.push(d.piece); g_turn = d.nextTurn; g_pairs = d.consecutivePairs; update(); draw(); });
     socket.on('gameOver', d => { alert("終局"); location.reload(); });
-    socket.on('playerLeft', () => { alert("相手が退出"); location.reload(); });
     socket.on('error_msg', m => alert(m));
 
-    // --- Input (安定版準拠) ---
     function getP(e) {
         const r = cvs.getBoundingClientRect();
         const t = e.touches ? e.touches[0] : e;
         return { x: t.clientX - r.left, y: t.clientY - r.top };
     }
 
+    // Interaction 
     wrap.addEventListener('touchstart', e => {
         if(e.touches.length === 1) { touch.isMove = false; const p = getP(e); touch.lx = p.x; touch.ly = p.y; }
         else if(e.touches.length === 2) { touch.ld = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }
@@ -158,9 +139,7 @@
     }, {passive:false});
 
     wrap.addEventListener('touchend', e => {
-        if(!touch.isMove && e.touches.length === 0) {
-            const p = getP(e.changedTouches[0]); doPlace(p.x, p.y);
-        }
+        if(!touch.isMove && e.touches.length === 0) { const p = getP(e.changedTouches[0]); doPlace(p.x, p.y); }
     });
 
     wrap.addEventListener('mousedown', e => { touch.isMove = false; touch.lx = e.clientX; touch.ly = e.clientY; touch.down = true; });
@@ -182,18 +161,16 @@
         const gx = Math.floor((sx - (cvs.width/2 - cam.x*s)) / s);
         const gy = Math.floor((sy - (cvs.height/2 - cam.y*s)) / s);
         if(gx<0 || gx>=128 || gy<0 || gy>=128 || g_board.find(p=>p.x===gx && p.y===gy)) return;
-
+        
         let isP = false;
         const last = g_board.filter(p=>p.player !== g_side).pop();
         if(last) {
             const dx = gx-last.x, dy = gy-last.y;
             if((last.direction===0 && dy===-1) || (last.direction===1 && dx===1) || (last.direction===2 && dy===1) || (last.direction===3 && dx===-1)) isP = true;
         }
-        if(isP && g_pairs[g_side] >= 3) return alert("対は3回まで");
-
         const np = [...g_pairs]; np[g_side] = isP ? np[g_side]+1 : 0;
-        const piece = { x:gx, y:gy, direction:selDir, player:g_side };
-        socket.emit('placePiece', { roomId: document.getElementById('ui_id').textContent, piece, consecutivePairs: np });
+        if(isP && np[g_side] > 3) return alert("対は3回まで");
+        socket.emit('placePiece', { roomId: document.getElementById('ui_id').textContent, piece: {x:gx, y:gy, direction:selDir, player:g_side}, consecutivePairs: np });
     }
 
     function draw() {
@@ -211,7 +188,7 @@
         });
     }
 
-    function refresh() {
+    function update() {
         document.getElementById('ui_status').textContent = g_turn===g_side?"★あなたの番":"相手の番";
         document.getElementById('ui_pairs').textContent = `PAIRS: ${g_pairs[0]}/${g_pairs[1]}`;
     }
