@@ -11,7 +11,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
 
-function broadcastRooms() {
+function broadcastRoomUpdate() {
     const list = Array.from(rooms.values()).map(r => ({
         id: r.id,
         playerCount: r.players.length,
@@ -23,13 +23,16 @@ function broadcastRooms() {
 }
 
 io.on("connection", (socket) => {
+    // 接続時にルーム一覧を送付
     socket.emit("updateRoomList", Array.from(rooms.values()).map(r => ({
         id: r.id, playerCount: r.players.length, hasPw: r.password !== "",
         status: r.gameStarted ? "PLAYING" : "OPEN", timeLimit: r.settings.timeLimit
     })));
 
     socket.on("createRoom", (data) => {
-        if (!data.roomId || rooms.has(data.roomId)) return socket.emit("error_msg", "ルーム名が無効です");
+        if (!data.roomId || rooms.has(data.roomId)) {
+            return socket.emit("error_msg", "ルーム名が無効または既に使用されています。");
+        }
         const room = {
             id: data.roomId,
             password: data.password || "",
@@ -45,20 +48,22 @@ io.on("connection", (socket) => {
         rooms.set(data.roomId, room);
         socket.join(data.roomId);
         socket.emit("roomJoined", { roomId: data.roomId, playerIndex: 0, timeLimit: room.settings.timeLimit });
-        broadcastRooms();
+        broadcastRoomUpdate();
     });
 
     socket.on("joinRoom", (data) => {
         const room = rooms.get(data.roomId);
         if (room && room.players.length < 2) {
-            if (room.password !== "" && room.password !== data.password) return socket.emit("error_msg", "PW不一致");
+            if (room.password !== "" && room.password !== data.password) return socket.emit("error_msg", "パスワードが違います。");
             room.players.push(socket.id);
             socket.join(data.roomId);
             socket.emit("roomJoined", { roomId: data.roomId, playerIndex: 1, timeLimit: room.settings.timeLimit });
             room.gameStarted = true;
-            broadcastRooms();
             io.to(data.roomId).emit("gameStart");
             startTimer(data.roomId);
+            broadcastRoomUpdate();
+        } else {
+            socket.emit("error_msg", "ルームが見つからないか満員です。");
         }
     });
 
@@ -76,7 +81,7 @@ io.on("connection", (socket) => {
                 const winner = 1 - room.turn;
                 io.to(roomId).emit("gameOver", { winner, reason: "TIMEOUT" });
                 rooms.delete(roomId);
-                broadcastRooms();
+                broadcastRoomUpdate();
             }
         }, 1000);
     }
@@ -84,11 +89,17 @@ io.on("connection", (socket) => {
     socket.on("placePiece", (data) => {
         const room = rooms.get(data.roomId);
         if (!room || room.players[room.turn] !== socket.id) return;
+        
         room.board.push(data.piece);
         room.pairCounts = data.consecutivePairs;
         room.turn = 1 - room.turn;
-        startTimer(data.roomId); // ターン交代でタイマーリセット
-        io.to(data.roomId).emit("moveMade", { piece: data.piece, nextTurn: room.turn, consecutivePairs: room.pairCounts });
+        
+        startTimer(data.roomId); // ターン交代時にタイマーリセット
+        io.to(data.roomId).emit("moveMade", { 
+            piece: data.piece, 
+            nextTurn: room.turn, 
+            consecutivePairs: room.pairCounts 
+        });
     });
 
     socket.on("declareWin", (data) => {
@@ -97,7 +108,7 @@ io.on("connection", (socket) => {
             if (room.timer) clearInterval(room.timer);
             io.to(data.roomId).emit("gameOver", { winner: data.winner, reason: "WIN" });
             rooms.delete(data.roomId);
-            broadcastRooms();
+            broadcastRoomUpdate();
         }
     });
 
@@ -107,20 +118,14 @@ io.on("connection", (socket) => {
                 if (room.timer) clearInterval(room.timer);
                 io.to(id).emit("playerLeft");
                 rooms.delete(id);
-                broadcastRooms();
+                broadcastRoomUpdate();
                 break;
             }
         }
     });
 });
 
-server.listen(3000, () => console.log("Server on 3000"));
-
-
-
-
-
-
-
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 
