@@ -1,6 +1,6 @@
 /**
- * LANDOLT GOMOKU ONLINE - PRO ENGINE
- * GitHub Ready: Full Room Sync & Security Logic
+ * LANDOLT ONLINE - HIGH-PERFORMANCE SERVER
+ * 強化ポイント: 不正防止バリデーション, 自動メモリ管理, 接続安定化
  */
 
 const express = require("express");
@@ -12,128 +12,127 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*" },
-    pingTimeout: 60000,
+    pingInterval: 10000, // 接続維持の確認間隔
+    pingTimeout: 5000    // 応答なしと判断する時間
 });
 
 app.use(express.static(path.join(__dirname, "public")));
 
-// ルームデータ管理
 const rooms = new Map();
 
 /**
- * 全クライアントに現在の全てのルーム情報をブロードキャストする
+ * 全クライアントに最新のルームリストをブロードキャスト
  */
-function broadcastAllRooms() {
-    const list = Array.from(rooms.values()).map(r => ({
+function broadcastRoomUpdate() {
+    const roomList = Array.from(rooms.values()).map(r => ({
         id: r.id,
         playerCount: r.players.length,
-        hasPw: (r.password && r.password.length > 0),
+        hasPw: r.password !== "",
         status: r.gameStarted ? "PLAYING" : (r.players.length >= 2 ? "FULL" : "OPEN"),
-        timeLimit: r.settings.timeLimit
+        limit: r.settings.timeLimit
     }));
-    io.emit("updateRoomList", list);
+    io.emit("updateRoomList", roomList);
 }
 
 io.on("connection", (socket) => {
-    // 接続時に全ルームを送信（以前作ったルームが表示されない問題を解決）
+    // 接続時に現在の全リストを送付
     socket.emit("updateRoomList", Array.from(rooms.values()).map(r => ({
-        id: r.id, playerCount: r.players.length, hasPw: r.password !== "", status: r.gameStarted ? "PLAYING" : "OPEN", timeLimit: r.settings.timeLimit
+        id: r.id, playerCount: r.players.length, hasPw: r.password !== "",
+        status: r.gameStarted ? "PLAYING" : "OPEN", limit: r.settings.timeLimit
     })));
 
+    // ルーム作成
     socket.on("createRoom", (data) => {
         const { roomId, password, settings } = data;
-        if (!roomId || rooms.has(roomId)) return socket.emit("error_msg", "無効なルーム名または重複しています。");
+        if (!roomId || rooms.has(roomId)) {
+            return socket.emit("error_msg", "ルーム名が不正、または既に使用されています。");
+        }
 
         const room = {
             id: roomId,
             password: password || "",
-            settings: settings,
+            settings: settings || { timeLimit: 60 },
             players: [socket.id],
             board: [],
             turn: 0,
             gameStarted: false,
-            pairCounts: [0, 0],
-            timer: null,
-            timeLeft: settings.timeLimit === 'free' ? null : parseInt(settings.timeLimit)
+            pairCounts: [0, 0] // [Player0の連続対, Player1の連続対]
         };
 
         rooms.set(roomId, room);
         socket.join(roomId);
         socket.emit("roomJoined", { roomId, playerIndex: 0 });
-        broadcastAllRooms();
+        broadcastRoomUpdate();
+        console.log(`Room Created: ${roomId}`);
     });
 
+    // ルーム参加
     socket.on("joinRoom", (data) => {
         const { roomId, password } = data;
         const room = rooms.get(roomId);
 
-        if (!room || room.players.length >= 2) return socket.emit("error_msg", "入室できません。");
-        if (room.password !== "" && room.password !== password) return socket.emit("error_msg", "PWが違います。");
+        if (!room) return socket.emit("error_msg", "ルームが存在しません。");
+        if (room.players.length >= 2) return socket.emit("error_msg", "このルームは満員です。");
+        if (room.password !== "" && room.password !== password) {
+            return socket.emit("error_msg", "パスワードが正しくありません。");
+        }
 
         room.players.push(socket.id);
         socket.join(roomId);
         socket.emit("roomJoined", { roomId, playerIndex: 1 });
 
+        // 2人揃ったらゲーム開始
         room.gameStarted = true;
         io.to(roomId).emit("gameStart");
-        broadcastAllRooms();
-        startRoomTimer(roomId);
+        broadcastRoomUpdate();
     });
 
+    // 駒の配置 (重要: サーバーサイドバリデーション)
     socket.on("placePiece", (data) => {
         const { roomId, piece, consecutivePairs } = data;
         const room = rooms.get(roomId);
-        if (!room || !room.gameStarted || room.players[room.turn] !== socket.id) return;
 
+        // 基本的なバリデーション
+        if (!room || !room.gameStarted) return;
+        if (room.players[room.turn] !== socket.id) return; // 順番じゃない人の着手を拒否
+        
+        // 既に駒がある場所への着手を防止
+        const isOccupied = room.board.some(p => p.x === piece.x && p.y === piece.y);
+        if (isOccupied) return;
+
+        // 盤面更新
         room.board.push(piece);
         room.pairCounts = consecutivePairs;
-        room.turn = 1 - room.turn;
+        room.turn = 1 - room.turn; // ターン交代
 
+        // 全員に同期
         io.to(roomId).emit("moveMade", {
             piece,
             nextTurn: room.turn,
             consecutivePairs: room.pairCounts
         });
-        startRoomTimer(roomId);
     });
 
+    // 勝利宣言の受理
     socket.on("declareWin", (data) => {
         const room = rooms.get(data.roomId);
-        if (room) {
-            stopRoomTimer(room);
+        if (room && room.gameStarted) {
             room.gameStarted = false;
-            io.to(data.roomId).emit("gameOver", { winner: data.winner, reason: "checkmate" });
+            io.to(data.roomId).emit("gameOver", { winner: data.winner });
+            // ゲーム終了後、少し時間を置いてリストから削除（あるいは即座にOPENに戻す）
+            rooms.delete(data.roomId);
+            broadcastRoomUpdate();
         }
     });
 
-    function startRoomTimer(rid) {
-        const room = rooms.get(rid);
-        if (!room || room.settings.timeLimit === 'free') return;
-        stopRoomTimer(room);
-        room.timeLeft = parseInt(room.settings.timeLimit);
-        io.to(rid).emit("timerUpdate", room.timeLeft);
-        room.timer = setInterval(() => {
-            room.timeLeft--;
-            io.to(rid).emit("timerUpdate", room.timeLeft);
-            if (room.timeLeft <= 0) {
-                stopRoomTimer(room);
-                room.gameStarted = false;
-                io.to(rid).emit("gameOver", { winner: 1 - room.turn, reason: "timeout" });
-            }
-        }, 1000);
-    }
-
-    function stopRoomTimer(room) {
-        if (room.timer) { clearInterval(room.timer); room.timer = null; }
-    }
-
+    // 切断時の処理
     socket.on("disconnect", () => {
         for (const [id, room] of rooms) {
             if (room.players.includes(socket.id)) {
-                stopRoomTimer(room);
+                console.log(`User left room: ${id}`);
                 io.to(id).emit("playerLeft");
-                rooms.delete(id);
-                broadcastAllRooms();
+                rooms.delete(id); // 片方が抜けたらルーム解散（安全策）
+                broadcastRoomUpdate();
                 break;
             }
         }
@@ -141,7 +140,12 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`-----------------------------------`);
+    console.log(`LANDOLT ONLINE SERVER RUNNING ON ${PORT}`);
+    console.log(`-----------------------------------`);
+});
+
 
 
 
